@@ -47,3 +47,8 @@ Team assignments are still being finalized. Participants can review their projec
 ## Working here
 
 This repository is the team's working space for the codeathon — code, notebooks, data pointers, and notes. Replace this README with the real thing once the charter is written. Team members get access through the [NIAID-BRC-Codeathons](https://github.com/NIAID-BRC-Codeathons) organization; accept the invitation if you have not already.
+
+## Environment
+
+- We will use the FAISS (Facebook AI Similiarity Search) vector database package to construct the similarity graph. FAISS requires `conda` to install, so we will need to use a `conda` environment for that, at least. I would rather use `pixi`, but I assume most people are more familiar with `conda` anyways so this works.
+  - See `environment.yaml` for the environment build.
