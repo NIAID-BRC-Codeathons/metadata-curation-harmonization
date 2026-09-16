@@ -37,3 +37,6 @@ dependencies:
   - tk=8.6.13
   - tzdata=2026c
   - wheel=0.48.0
+  - pip:
+      - polars==1.44.2
+      - polars-runtime-32==1.44.2

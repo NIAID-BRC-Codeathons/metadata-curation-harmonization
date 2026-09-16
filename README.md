@@ -50,5 +50,18 @@ This repository is the team's working space for the codeathon — code, notebook
 
 ## Environment
 
-- We will use the FAISS (Facebook AI Similiarity Search) vector database package to construct the similarity graph. FAISS requires `conda` to install, so we will need to use a `conda` environment for that, at least. I would rather use `pixi`, but I assume most people are more familiar with `conda` anyways so this works.
+- We will use the FAISS (Facebook AI Similiarity Search) vector database package for the ontology RAG implementation. FAISS requires `conda` to install, so we will need to use a `conda` environment for that, at least. I would rather use `pixi`, but I assume most people are more familiar with `conda` anyways so this works.
   - See `environment.yaml` for the environment build.
+
+Install `conda` dependencies:
+
+```bash
+conda env create -n metadata-curation -f environment.yaml
+conda activate metadata-curation
+```
+
+With the environment activated, install PyPI dependencies.
+
+```bash
+pip install -r requirements.txt
+```
