@@ -48,7 +48,7 @@ class Faiss:
         match self.metric:
             case FaissMetric.COSINE:
                 index = faiss.IndexFlatIP(dim)  # inner product
-                faiss.normalize_L2(vectors)
+                faiss.normalize_L2(data)
             case FaissMetric.DOT:
                 index = faiss.IndexFlatIP(dim)
             case FaissMetric.L2:
