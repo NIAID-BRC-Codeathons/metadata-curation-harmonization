@@ -1,0 +1,34 @@
+primary: genome
+
+files:
+  genome:
+    path: genome.jsonl
+    index_on: accession
+    primary_key: currentAccession
+    elide: 
+      - assemblyInfo.bioprojectLineage
+      - assemblyInfo.biosample
+
+  biosample:
+    path: biosample.jsonl
+    index_on: accession
+    link_file: genome-acc.link
+    column: 2
+
+  bioproject:
+    path: bioproject.jsonl
+    index_on: _key
+    link_file: genome-acc.link
+    column: 4
+
+  sra-experiment:
+    path: sra-experiment.jsonl
+    index_on: _key
+    link_file: sra-bioproject.link
+    column_related: bioproject
+    column: 2
+
+  bv_brc:
+    path: bvbrc_staph.jsonl
+    index_on: assembly_accession
+    has_primary_key: true
