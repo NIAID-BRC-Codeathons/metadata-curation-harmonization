@@ -41,7 +41,8 @@ Team assignments are still being finalized. Participants can review their projec
 
 ## Members
 
-- Curtis Hendrickson 
+- Curtis Hendrickson
+- Andrew LaPointe
 
 ## Working here
 
