@@ -39,6 +39,10 @@ Train or calibrate ontology-linking and metadata-normalization components. Hide 
 
 Team assignments are still being finalized. Participants can review their project, and request a reassignment, in the participant spreadsheet circulated by the organizing team.
 
+## Members
+
+- Curtis Hendrickson 
+
 ## Working here
 
 This repository is the team's working space for the codeathon — code, notebooks, data pointers, and notes. Replace this README with the real thing once the charter is written. Team members get access through the [NIAID-BRC-Codeathons](https://github.com/NIAID-BRC-Codeathons) organization; accept the invitation if you have not already.
