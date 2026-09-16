@@ -1,0 +1,22 @@
+# Core dependencies
+langchain>=0.1.0
+langchain-openai>=0.0.5
+pydantic>=2.5.0
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# Utilities
+httpx==0.26.0
+tqdm==4.66.1
+
+# Web UI (Day 2)
+streamlit==1.31.0
+pandas==2.2.0
+
+# Development/Testing
+pytest==8.0.0
+jupyter==1.0.0
+ipykernel==6.29.0
+
+# Optional: for async processing later
+# aiofiles==23.2.1
