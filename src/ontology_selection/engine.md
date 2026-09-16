@@ -1,8 +1,8 @@
 # Engine structure — plan · retrieve · resolve
 
-**Scope (v1):** *Staphylococcus aureus* · `isolation_source`  
+**Scope (v1):** *Staphylococcus aureus* · primarily `isolation_source`  
 **I/O:** JSON / JSONL inside the engine  
-**This doc is the source of truth for structure.** Implementation details (rules, stubs, OLS, Argo) come later.
+**This doc is the source of truth for structure.** Implementation comes later.
 
 ---
 
@@ -11,9 +11,9 @@
 ```
 DATA                    ENGINE                         VALIDATION / HITL
 ────                    ──────                         ─────────────────
-records.jsonl      →    A. Plan (what to search)   →   soft checkers (flags)
+records.jsonl      →    A. Plan (mappings)         →   soft checkers (flags)
 gold (later)       →    B. Retrieve (RAG top-k)    →   human review
-row context        →    C. Resolve (final terms)   →   score vs gold
+row context        →    C. Resolve (term set)      →   score vs gold
 ```
 
 - **Data** loads and normalizes rows.  
@@ -24,107 +24,86 @@ Raw collaborator files (CSV, etc.) are adapted **once** into JSONL. The engine o
 
 ---
 
-## 2. Multi-ontology is normal (not an edge case)
+## 2. Core idea: ontology ↔ field is N:M
 
-CEDAR gold uses **UBERON / ENVO / MONDO**. Many real `isolation_source` strings are **not** “one ontology only.”
+Plan must emit a **clean mapping**, not two disconnected lists (`ontologies[]` + `fields[]`).
 
-| Example free text | Likely ontologies | Why |
+| Relationship | Allowed? | Example |
 |---|---|---|
-| `blood` | UBERON | Pure anatomy |
-| `wastewater` | ENVO | Pure environment |
-| `wound infection` | **UBERON + MONDO** | Site + disease context |
-| `abscess drainage` | **UBERON + MONDO** | Anatomy + clinical condition |
-| `hospital wastewater` | ENVO (+ maybe UBERON if “hospital” is weak) | Environment-first |
+| 1 field → 1 ontology | Yes | `isolation_source` → ENVO only (`wastewater`) |
+| 1 field → many ontologies | Yes (common) | `isolation_source` → UBERON **and** MONDO (`wound infection`) |
+| many fields → 1 ontology | Yes | `isolation_source` + `body_sample_site` → UBERON |
+| many fields → many ontologies | Yes | site text → UBERON; disease-ish phrase → MONDO |
 
-So **UBERON + MONDO at the same time is expected**, not a bug.
+**Not 1:1.** Do not assume one ontology per field or one field per ontology.
 
-### What we do when more than one ontology applies
+Unit of work after Plan = one **mapping entry**:
 
-1. **Plan** may name **1–N ontologies** (typically 1–3). Do not force a single winner early.  
-2. **Retrieve** runs **in parallel per ontology** → separate top-k lists.  
-3. **Resolve** emits a **term set**, not only one CURIE:
-   - `terms: [{ontology, term_id, label, role}, …]`
-   - `role` ∈ `primary` | `secondary` | `alternate`
-4. **Gold / eval** can match:
-   - exact single-term gold, or  
-   - partial credit if gold has one term and we proposed that term among several, or  
-   - set overlap when gold itself has multiple mappings.
+```text
+(ontology, fields[], query_texts[])
+```
 
-**Do not** collapse “wound infection” into only UBERON *or* only MONDO in the engine output if both are supported. Prefer listing both; let the **human review** drop one if CEDAR policy says “one primary ontology per row.”
-
-**Policy for review UI (later):** show all proposed terms; curator can accept a subset. That matches “likely both.”
+Retrieve and Resolve both consume that same unit so the pipeline stays consistent.
 
 ---
 
-## 3. Engine steps (structure only)
+## 3. Multi-ontology examples
+
+| Free text | Mappings |
+|---|---|
+| `blood` | UBERON ← `isolation_source` |
+| `wastewater` | ENVO ← `isolation_source` |
+| `wound infection` | UBERON ← `isolation_source`; MONDO ← `isolation_source` |
+| `nasal` + body site `swab` | UBERON ← `isolation_source`, `body_sample_site` |
+
+Resolve may emit **several terms** (one or more per mapping). Human review can accept a subset.
+
+---
+
+## 4. Engine steps
 
 ### A — Plan
 
-**Job:** From one row (+ optional context), decide *search intent*.
+**Job:** Build the ontology↔field mapping for this row.
 
-**Inputs:** `isolation_source`, optional `body_sample_site`, comments, host (for “misfiled host” detection only).
+**Does:** choose which fields feed which ontologies, and which query strings to search.  
+**Does not:** invent CURIEs.
 
-**Outputs:**
-- `query_texts[]` — strings to embed / search  
-- `ontologies[]` — which stores to query (**may be multiple**)  
-- `columns_used[]`  
-- optional `notes` / soft flags (e.g. `looks_like_host`)
+### B — Retrieve
 
-Plan does **not** invent CURIEs. It only chooses *where and what to search*.
+**Job:** For **each mapping entry**, run RAG → top-k candidates for that ontology (queries derived from the listed fields).
 
-### B — Retrieve (RAG)
-
-**Job:** For each `(query_text × ontology)`, return **top-k** candidates with real CURIEs.
-
-```
-row
- ├─ UBERON  → [c1, c2, … ck]
- ├─ MONDO   → [m1, m2, … mk]
- └─ ENVO    → […]   # only if planned
-```
-
-Invariant: every CURIE is **retrieved**, never typed by an LLM.
+Each candidate must carry **`curie` + `label` + `definition`** (from the ontology service / index).  
+Label alone is not enough for Resolve, human review, or later checks — definition is the disambiguating text.
 
 ### C — Resolve
 
-**Job:** Turn candidate lists into a **final answer object** for that row.
-
-- May pick **zero** terms (abstain)  
-- May pick **one** term  
-- May pick **several** terms across ontologies (e.g. UBERON primary + MONDO secondary)
-
-Resolve only chooses among retrieved CURIEs (plus abstain).
+**Job:** From all candidate buckets, emit a **term set** (0..N terms). Each term must name its `field` + `ontology` + retrieved `term_id`, and **copy through `label` + `definition`** from the chosen candidate (do not regenerate definitions).
 
 ---
 
-## 4. Soft checkers (per step) — flag, don’t hard-stop
+## 5. Soft checkers — flag, don’t hard-stop
 
-Yes: a checker after each step makes sense.  
-No: a soft failure should **not** kill the pipeline by default.
+| Step | Soft (continue + flag) | Hard (rare) |
+|---|---|---|
+| Plan | host-like text; empty query for one mapping | no usable fields at all → skip retrieve, abstain |
+| Retrieve | empty top-k for one mapping; `missing_definition` on a hit (still keep candidate) | — |
+| Resolve | weak confidence; missing definition on chosen term (prefer defined candidates) | **invented CURIE** → drop that term |
 
-| Step | Checker asks | Soft (continue + flag) | Hard (only rare) |
-|---|---|---|---|
-| **A Plan** | Empty query? Host-like value? Zero ontologies? | `flag: looks_like_host`, still allow retrieve if policy says try | Row truly empty → skip retrieve, emit abstain |
-| **B Retrieve** | Empty top-k for an ontology? Duplicate CURIEs? | `flag: empty_rag_UBERON`; still resolve with other ontologies | — |
-| **C Resolve** | Term not in candidates? Empty terms with no abstain reason? | Prefer rewrite to abstain + flag | **Invented CURIE** → reject that term (invariant) |
-
-**Pattern:**
-
-```
-out = step(in)
-out, flags = check_step(out)
-carry flags forward
-always pass out to the next step unless hard-skip
-```
-
-Final record keeps `flags[]` for metrics and for the review UI (“why was this weird?”).  
-Human review and gold eval are the real stop/go — not the mid-pipeline checkers.
+Flags accumulate on the object and travel to review/metrics.
 
 ---
 
-## 5. JSON shapes (structure)
+## 6. JSON contracts (consistent end-to-end)
 
-### Row in
+Shared enums:
+
+- `ontology` ∈ `UBERON` | `ENVO` | `MONDO` (optional RAG helper: `OBI`)
+- `field` ∈ row keys used for search, mainly `isolation_source` (also `body_sample_site` when present)
+- `role` ∈ `primary` | `secondary` | `alternate`
+- `outcome` ∈ `proposed` | `insufficient_evidence` | `proposed_with_flags`
+
+### 6.1 Row in
 
 ```json
 {
@@ -137,32 +116,108 @@ Human review and gold eval are the real stop/go — not the mid-pipeline checker
 }
 ```
 
-### After Plan
+### 6.2 After Plan — mapping list (N:M)
+
+Each element ties **one ontology** to **one or more fields** and the **queries** built from those fields.
 
 ```json
 {
   "record_id": "1280.123",
-  "query_texts": ["wound infection", "wound", "infection"],
-  "ontologies": ["UBERON", "MONDO"],
-  "columns_used": ["isolation_source"],
+  "mappings": [
+    {
+      "ontology": "UBERON",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "wound"]
+    },
+    {
+      "ontology": "MONDO",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "infection"]
+    }
+  ],
   "flags": []
 }
 ```
 
-### After Retrieve
+**Rules for a valid Plan object:**
+
+1. `mappings` may be length 0 (abstain path) or ≥ 1.  
+2. Each mapping has exactly one `ontology`.  
+3. `fields` is a non-empty list of row field names that contributed.  
+4. `query_texts` is a non-empty list (unless the whole plan is empty / skipped).  
+5. Same field may appear in **multiple** mappings (N:M).  
+6. Same ontology should appear **at most once** in `mappings` (merge fields/queries if needed) — keeps Retrieve keys clean.  
+7. No CURIEs in Plan.
+
+**Many fields → one ontology example:**
+
+```json
+{
+  "record_id": "1280.456",
+  "mappings": [
+    {
+      "ontology": "UBERON",
+      "fields": ["isolation_source", "body_sample_site"],
+      "query_texts": ["nasal", "swab", "nasal swab"]
+    }
+  ],
+  "flags": []
+}
+```
+
+### 6.3 After Retrieve — one bucket per mapping
+
+Same cardinality and keys as Plan `mappings` (aligned by `ontology`).
 
 ```json
 {
   "record_id": "1280.123",
-  "by_ontology": {
-    "UBERON": [{"curie": "UBERON:…", "label": "…", "score": 0.9, "rank": 0}],
-    "MONDO": [{"curie": "MONDO:…", "label": "…", "score": 0.8, "rank": 0}]
-  },
+  "buckets": [
+    {
+      "ontology": "UBERON",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "wound"],
+      "candidates": [
+        {
+          "curie": "UBERON:0002097",
+          "label": "skin of body",
+          "definition": "The organ covering the body that consists of dermis and epidermis.",
+          "ontology": "UBERON",
+          "score": 0.9,
+          "rank": 0
+        }
+      ]
+    },
+    {
+      "ontology": "MONDO",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "infection"],
+      "candidates": [
+        {
+          "curie": "MONDO:0004485",
+          "label": "wound infection",
+          "definition": "An infection that involves a wound.",
+          "ontology": "MONDO",
+          "score": 0.85,
+          "rank": 0
+        }
+      ]
+    }
+  ],
   "flags": []
 }
 ```
 
-### After Resolve (multi-term capable)
+**Rules:**
+
+1. Every bucket `ontology` / `fields` / `query_texts` echoes its Plan mapping.  
+2. Every `candidates[].curie` is retrieved (never model-typed).  
+3. Every candidate should include `definition` when the ontology API provides one; use `null` + soft flag `missing_definition` if absent — do not invent definitions.  
+4. Empty `candidates` is allowed → soft flag `empty_rag_<ONTOLOGY>`; do not stop other buckets.
+
+**Why definition here:** Resolve (LLM or rules), human review, and later consistency checks need “what this term *means*,” not only the short label (labels collide; definitions usually do not).
+
+### 6.4 After Resolve — term set (still field-aware)
 
 ```json
 {
@@ -170,86 +225,130 @@ Human review and gold eval are the real stop/go — not the mid-pipeline checker
   "outcome": "proposed",
   "terms": [
     {
+      "field": "isolation_source",
       "ontology": "UBERON",
-      "term_id": "UBERON:…",
+      "term_id": "UBERON:0002097",
       "label": "skin of body",
+      "definition": "The organ covering the body that consists of dermis and epidermis.",
       "role": "primary",
       "confidence": 0.8
     },
     {
+      "field": "isolation_source",
       "ontology": "MONDO",
-      "term_id": "MONDO:…",
+      "term_id": "MONDO:0004485",
       "label": "wound infection",
+      "definition": "An infection that involves a wound.",
       "role": "secondary",
       "confidence": 0.7
     }
   ],
-  "candidate_curies": ["UBERON:…", "MONDO:…"],
+  "candidate_curies": ["UBERON:0002097", "MONDO:0004485"],
+  "mappings": [
+    {
+      "ontology": "UBERON",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "wound"]
+    },
+    {
+      "ontology": "MONDO",
+      "fields": ["isolation_source"],
+      "query_texts": ["wound infection", "infection"]
+    }
+  ],
   "flags": [],
   "abstain_reason": null
 }
 ```
 
-`outcome`: `proposed` | `insufficient_evidence` | `proposed_with_flags`
+**Rules:**
 
-Every `term_id` must appear in `candidate_curies`.
+1. Each term names **`field` + `ontology` + `term_id` + `label` + `definition`**.  
+2. `term_id` ∈ `candidate_curies` (hard check).  
+3. `label` / `definition` are **copied from the Retrieve candidate**, not rewritten by the LLM.  
+4. `field` must be one of the `fields` on the mapping for that `ontology`.  
+5. `mappings` is copied through for provenance / review.  
+6. `terms` may be empty only with `outcome: insufficient_evidence` and an `abstain_reason`.  
+7. Multiple terms may share the same `field` (multi-ontology on one column).
 
 ---
 
-## 6. Host vs isolation_source
+## 7. Worked flow (one string → two ontologies)
+
+```text
+Row.isolation_source = "wound infection"
+
+Plan.mappings =
+  [ UBERON ← [isolation_source]
+  , MONDO  ← [isolation_source] ]
+
+Retrieve.buckets =
+  [ UBERON top-k
+  , MONDO  top-k ]
+
+Resolve.terms =
+  [ {field: isolation_source, ontology: UBERON, …}
+  , {field: isolation_source, ontology: MONDO,  …} ]
+
+Human review: accept both / one / neither
+```
+
+---
+
+## 8. Host vs isolation_source
 
 | Field | Ontologies | In this engine? |
 |---|---|---|
-| `isolation_source` | UBERON, ENVO, MONDO (+ OBI for RAG help) | **Yes** |
+| `isolation_source` | UBERON, ENVO, MONDO (+ OBI optional for RAG) | **Yes** |
+| `body_sample_site` | usually UBERON / OBI as helper field in a mapping | optional input |
 | `host` | NCBITaxon | **No (v1)** |
 
-If the free text is really a host (`human`, species name), Plan should **flag** `looks_like_host`. Soft checker records it; Resolve usually **abstains** rather than inventing a body-site term. That is not the same as “run UBERON + MONDO.”
+Host-like values in `isolation_source` → Plan `flags: ["looks_like_host"]`, usually empty `mappings` / abstain at Resolve. That is **not** a UBERON+MONDO mapping.
 
 ---
 
-## 7. Package layout (when we implement)
-
-Logical modules — names can match this doc:
+## 9. Package layout (when we implement)
 
 ```
 engine/
-  plan.py        # A
-  retrieve.py    # B (RAG)
-  resolve.py     # C
-  checks.py      # soft checkers per step + hard invented-ID guard
-  pipeline.py    # wire A→B→C, accumulate flags
-  models.py      # JSON contracts above
+  plan.py        # A → PlanResult { mappings[] }
+  retrieve.py    # B → RetrieveResult { buckets[] }
+  resolve.py     # C → Proposal { terms[] }
+  checks.py      # soft flags + hard invented-ID guard
+  pipeline.py    # A→B→C, carry mappings + flags
+  models.py      # contracts in §6
 ```
-
-No dependency on fake lexicons in the **design**. Retrieval backends (OLS, embeddings, stubs) are swappable behind `retrieve`.
 
 ---
 
-## 8. Data files
+## 10. Data files
 
 | Path | Format | Role |
 |---|---|---|
 | `data/raw/records.jsonl` | JSONL | Working rows |
-| `data/out/proposals.jsonl` | JSONL | Engine output (multi-term OK) |
-| `data/gold/` | JSON (CSV adapted if needed) | CEDAR truth |
-| `data/out/decisions.jsonl` | JSONL | Human accept / reject / edit subset of terms |
+| `data/out/proposals.jsonl` | JSONL | Resolve output |
+| `data/gold/` | JSON | CEDAR truth |
+| `data/out/decisions.jsonl` | JSONL | Human accept / reject / edit term subset |
 
 ---
 
-## 9. Decisions locked by this doc
+## 11. Decisions locked
 
-1. Engine steps are **Plan → Retrieve → Resolve** (not “single ontology forever”).  
-2. **Multiple ontologies per row are first-class** (UBERON + MONDO is expected).  
-3. Output is a **term set** with roles; review can accept a subset.  
-4. **Per-step checkers are soft** (flags + continue); only invented CURIEs are hard rejects.  
-5. **JSON/JSONL** is the engine language.  
-6. Host / NCBITaxon stays outside v1.
+1. Plan output is a **`mappings[]`** list — explicit ontology↔field links (N:M).  
+2. Retrieve **`buckets[]`** align 1:1 with plan mappings (by ontology).  
+3. Retrieve candidates and Resolve terms both carry **`label` + `definition`** (definition from ontology; never invented).  
+4. Resolve **`terms[]`** always carry `field` + `ontology` + retrieved `term_id`.  
+5. Multi-ontology on one field is normal.  
+6. Soft checkers flag and continue; invented CURIEs are hard drops.  
+7. JSON/JSONL only inside the engine.  
+8. Host / NCBITaxon out of v1.
 
 ---
 
-## 10. Non-goals (v1)
+## 12. Non-goals (v1)
 
 - Writing back to BV-BRC  
 - LLM-invented gold  
 - Full multi-user website  
-- Replacing human review with checkers
+- Replacing human review with checkers  
+- Forcing 1:1 ontology↔field
