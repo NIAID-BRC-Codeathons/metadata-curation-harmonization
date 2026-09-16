@@ -72,9 +72,11 @@ Resolve may emit **several terms** (one or more per mapping). Human review can a
 ### B — Retrieve
 
 **Job:** For **each mapping entry**, run RAG → top-k candidates for that ontology (queries derived from the listed fields).
+  * hypothetical command line: ```rag.py --input in.json --top-k 10 --model [biomedbert] --metric [cosine] --device gpu|cpu --low-score-threshold 0.70 --outfile [rag_results.json]```
 
 Each candidate must carry **`curie` + `label` + `definition`** (from the ontology service / index).  
 Label alone is not enough for Resolve, human review, or later checks — definition is the disambiguating text.
+
 
 ### C — Resolve
 
