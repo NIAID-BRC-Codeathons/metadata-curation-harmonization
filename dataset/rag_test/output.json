@@ -1,0 +1,163 @@
+[
+  {
+    "record_id": "TEST001",
+    "by_ontology": {
+      "UBERON": [
+        {
+          "term_id": "UBERON:0001099",
+          "term_name": "subcostal vein",
+          "label": "subcostal vein",
+          "score": 0.020368222147226334,
+          "rank": 0
+        },
+        {
+          "term_id": "UBERON:0001107",
+          "term_name": "sternohyoid muscle",
+          "label": "sternohyoid muscle",
+          "score": 0.014525486156344414,
+          "rank": 1
+        },
+        {
+          "term_id": "UBERON:0001095",
+          "term_name": "caudal vertebra",
+          "label": "caudal vertebra",
+          "score": 0.007514310069382191,
+          "rank": 2
+        },
+        {
+          "term_id": "UBERON:0000029",
+          "term_name": "lymph node",
+          "label": "lymph node",
+          "score": 0.005152043886482716,
+          "rank": 3
+        },
+        {
+          "term_id": "UBERON:0000107",
+          "term_name": "cleavage stage",
+          "label": "cleavage stage",
+          "score": 0.0047993347980082035,
+          "rank": 4
+        },
+        {
+          "term_id": "UBERON:0000109",
+          "term_name": "gastrula stage",
+          "label": "gastrula stage",
+          "score": 0.00408713286742568,
+          "rank": 5
+        },
+        {
+          "term_id": "UBERON:0000089",
+          "term_name": "hypoblast (generic)",
+          "label": "hypoblast (generic)",
+          "score": 0.003999081905931234,
+          "rank": 6
+        },
+        {
+          "term_id": "UBERON:0000158",
+          "term_name": "membranous layer",
+          "label": "membranous layer",
+          "score": 0.0023966017179191113,
+          "rank": 7
+        },
+        {
+          "term_id": "UBERON:0000994",
+          "term_name": "spermathecum",
+          "label": "spermathecum",
+          "score": 0.002309256698936224,
+          "rank": 8
+        },
+        {
+          "term_id": "UBERON:0000162",
+          "term_name": "cloaca",
+          "label": "cloaca",
+          "score": 0.0012283558025956154,
+          "rank": 9
+        }
+      ],
+      "MONDO": [
+        {
+          "term_id": "MONDO:0000340",
+          "term_name": "bulbospinal polio",
+          "label": "bulbospinal polio",
+          "score": 0.017198795452713966,
+          "rank": 0
+        },
+        {
+          "term_id": "MONDO:0000108",
+          "term_name": "bacteremia, susceptibility",
+          "label": "bacteremia, susceptibility",
+          "score": 0.011753031983971596,
+          "rank": 1
+        },
+        {
+          "term_id": "MONDO:0000544",
+          "term_name": "mucosal melanoma",
+          "label": "mucosal melanoma",
+          "score": 0.008232338353991508,
+          "rank": 2
+        },
+        {
+          "term_id": "MONDO:0000902",
+          "term_name": "agenesis of the corpus callosum with peripheral neuropathy",
+          "label": "agenesis of the corpus callosum with peripheral neuropathy",
+          "score": 0.007123107090592384,
+          "rank": 3
+        },
+        {
+          "term_id": "MONDO:0000874",
+          "term_name": "T-cell childhood lymphoblastic lymphoma",
+          "label": "T-cell childhood lymphoblastic lymphoma",
+          "score": 0.0061613693833351135,
+          "rank": 4
+        },
+        {
+          "term_id": "MONDO:0000432",
+          "term_name": "lymphoplasmacytic lymphoma",
+          "label": "lymphoplasmacytic lymphoma",
+          "score": 0.00494316266849637,
+          "rank": 5
+        },
+        {
+          "term_id": "MONDO:0000676",
+          "term_name": "phonagnosia",
+          "label": "phonagnosia",
+          "score": 0.0044916593469679356,
+          "rank": 6
+        },
+        {
+          "term_id": "MONDO:0000661",
+          "term_name": "alexithymia",
+          "label": "alexithymia",
+          "score": 0.003816402517259121,
+          "rank": 7
+        },
+        {
+          "term_id": "MONDO:0000396",
+          "term_name": "spastic cerebral palsy",
+          "label": "spastic cerebral palsy",
+          "score": 0.003580324351787567,
+          "rank": 8
+        },
+        {
+          "term_id": "MONDO:0000679",
+          "term_name": "social emotional agnosia",
+          "label": "social emotional agnosia",
+          "score": 0.002861390821635723,
+          "rank": 9
+        }
+      ]
+    },
+    "queried_fields": {
+      "UBERON": [
+        "isolation_source"
+      ],
+      "MONDO": [
+        "note"
+      ]
+    },
+    "flags": [
+      "UBERON: top match score 0.020 below threshold 0.7",
+      "MONDO: top match score 0.017 below threshold 0.7"
+    ]
+  }
+]

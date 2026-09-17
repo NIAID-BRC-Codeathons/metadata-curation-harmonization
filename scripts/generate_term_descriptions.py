@@ -23,7 +23,7 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ontology_rag.ontology import Ontology, OboEntry  # noqa: E402
+from ontology_rag.ontology import OboEntry, Ontology  # noqa: E402
 
 ONTOLOGY_DIR = Path(__file__).parent.parent / "data" / "ontology"
 DEFAULT_OUTFILE = ONTOLOGY_DIR / "term_descriptions.parquet"
@@ -37,9 +37,12 @@ ID_PREFIXES: dict[str, str] = {
 }
 
 
-def build_description(entry: OboEntry) -> str:
+def build_description(entry: OboEntry, include_def: bool = False) -> str:
     """Concatenate a term's name and definition into a single lowercase sentence."""
-    text = f"{entry.name}: {entry.definition}" if entry.definition else entry.name
+    if include_def:
+        text = f"{entry.name}: {entry.definition}" if entry.definition else entry.name
+    else:
+        text = entry.name
     return text.strip().lower()
 
 
@@ -67,6 +70,12 @@ def main() -> None:
         help="Which OBO file(s) in data/ontology/ to pull term descriptions from.",
     )
     parser.add_argument(
+        "--use-def",
+        action="store_true",
+        help="Apply flag to include term definitions in the description."
+        " Otherwise, only names are included.",
+    )
+    parser.add_argument(
         "-o",
         "--outfile",
         type=Path,
@@ -76,7 +85,8 @@ def main() -> None:
     args = parser.parse_args()
 
     dfs = [
-        build_term_descriptions(ONTOLOGY_DIR / f"{name}.obo.gz") for name in args.ontology
+        build_term_descriptions(ONTOLOGY_DIR / f"{name}.obo.gz")
+        for name in args.ontology
     ]
     df = pl.concat(dfs)
 
