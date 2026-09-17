@@ -75,6 +75,9 @@ def main():
         "--limit", type=int, help="Plan only the first N records."
     )
     parser.add_argument(
+        "--ids", help="Text file with one record ID per line. Only process these records."
+    )
+    parser.add_argument(
         "--workers", type=int, help="Records to plan concurrently."
     )
     parser.add_argument(
@@ -91,7 +94,13 @@ def main():
     config.setdefault("logging", {})["level"] = args.log_level
     setup_logging(config)
 
-    records = ingest_jsonl(args.input, config, limit=args.limit)
+    ids = None
+    if args.ids and args.ids.strip():
+        with open(args.ids) as f:
+            ids = {line.strip() for line in f if line.strip()}
+        logger.info(f"Filtering to {len(ids)} record IDs from {args.ids}")
+
+    records = ingest_jsonl(args.input, config, limit=args.limit, ids=ids)
     if not records:
         print(f"ERROR: No records loaded from {args.input}", file=sys.stderr)
         sys.exit(1)

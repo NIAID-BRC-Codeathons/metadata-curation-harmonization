@@ -31,6 +31,7 @@ settings:
   selection_config: src/ontology_selection/config.yaml
   workers: 10
   record_limit: 0        # 0 = every record; override with --set record_limit=100
+  record_ids: ""         # path to ID file; override with --set record_ids=path/to/ids.txt
 
 stages:
   # A. Plan - decide which ontologies to search and with what query texts.
@@ -40,6 +41,7 @@ stages:
       python3 -m ontology_selection.select_ontology
       --input {records} --output {plans}
       --config {selection_config} --workers {workers} --limit {record_limit}
+      --ids {record_ids}
     inputs:  [records]
     outputs: [plans]
 
