@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "omics": {
+      "type": "stdio",
+      "command": "omics-mcp"
+    }
+  }
+}

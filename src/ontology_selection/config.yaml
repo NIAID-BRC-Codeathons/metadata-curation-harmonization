@@ -1,0 +1,67 @@
+# AI-Driven Metadata Curation Configuration
+
+# LLM Configuration (Argo)
+llm:
+  provider: argo
+  model: gpt56terra  # GPT model (Claude models have max_tokens issue with LangChain)
+  temperature: 1
+  max_tokens: 4096
+  base_url: https://apps.inside.anl.gov/argoapi/v1
+
+# Ontology Mappings
+ontologies:
+  UBERON:
+    description: "Anatomical structures and tissues"
+    fields_hint: "isolation_source, body_sample_site, tissue, organ"
+  MONDO:
+    description: "Diseases and clinical conditions"
+    fields_hint: "note, disease, infection, clinical_context"
+  ENVO:
+    description: "Environmental contexts and locations"
+    fields_hint: "isolation_source, geo_loc_name, environment, habitat"
+
+# Field Selection Configuration
+field_selection:
+  # Stop list: paths to ignore (never send to Plan agent)
+  ignore_paths:
+    - "genomes.assemblyInfo.assemblyStats"
+    - "genomes.assemblyInfo.sequencingTech"
+    - "genomes.assemblyInfo.assemblyMethod"
+    - "genomes.assemblyInfo.releaseDate"
+    - "genomes.assemblyInfo.submitter"
+    - "genomes.biosample.submissionDate"
+    - "genomes.biosample.publicationDate"
+    - "genomes.biosample.lastUpdated"
+    - "genomes.biosample.owner"
+    - "genomes.biosample.status"
+    - "genomes.biosample.sampleIds"
+    - "genomes.biosample.models"
+    - "genomes.biosample.package"
+    - "genomes.bioproject.accession"  # Keep just the ID, not full object
+    - "genomes.sra.runs"  # Too low-level
+  
+  # Consider list: paths that are potentially useful
+  consider_paths:
+    - "genomes.biosample.host"
+    - "genomes.biosample.geoLocName"
+    - "genomes.biosample.collectionDate"
+    - "genomes.biosample.attributes"  # Array of {name, value}
+    - "genomes.biosample.description.title"
+    - "genomes.bioproject.title"
+    - "genomes.bioproject.description"
+  
+  # Flatten biosample.attributes array to top-level fields
+  flatten_attributes: true
+
+# Parallelization Settings
+# Stage commands, artifact paths and RAG settings live in ../../pipeline.yaml.
+parallelism:
+  max_workers: 1  # Number of records to process concurrently (increase to 10+ for production)
+  stage_parallelism: true  # Enable parallel RAG calls within a single record (UBERON/MONDO/ENVO)
+  batch_size: 100  # For batch processing modes
+
+# Logging
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  file: data/out/pipeline.log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

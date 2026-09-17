@@ -30,7 +30,7 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 conda deactivate
 conda activate embeddings
 
-python scripts/embed_query_records.py -i "$RECORDS" -o query_embeddings.parquet
+python scripts/embed_query_records.py -i "$RECORDS" -o query_embeddings.parquet -m sapbert
 
 conda deactivate
 conda activate metadata-curation

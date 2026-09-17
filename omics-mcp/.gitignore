@@ -1,0 +1,14 @@
+# Generated data, rebuilt with omics-mcp-build.
+parquet/
+*.parquet
+*.jsonl
+*.jsonl.gz
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+ve/
+*.egg-info/
+dist/
+build/

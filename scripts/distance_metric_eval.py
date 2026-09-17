@@ -96,7 +96,9 @@ class OntologyScorer:
     # comparable=False means the pair never reached the graph, which is not the
     # same as a real jaccard of 0.0
     def score_pair(self, ontology: str, predicted: str, target: str) -> dict:
-        exact = int(predicted == target)
+        # not reported on its own any more (f1_pred covers exact matching); it
+        # still decides what an unreachable pair is worth
+        exact = predicted == target
 
         try:
             sim = self.adapter(ontology).pairwise_similarity(
@@ -104,7 +106,6 @@ class OntologyScorer:
             )
         except Exception:  # invalid / out-of-ontology ID
             return {
-                "exact": exact,
                 "jaccard": 1.0 if exact else 0.0,
                 "resnik": None,
                 "phenodigm": None,
@@ -113,7 +114,6 @@ class OntologyScorer:
             }
 
         return {
-            "exact": exact,
             "jaccard": sim.jaccard_similarity,
             "resnik": sim.ancestor_information_content,
             "phenodigm": sim.phenodigm_score,
@@ -171,7 +171,6 @@ class OntologyScorer:
                 "status": "scored",
                 "gold": target,
                 "n_terms": len(per_term),
-                "exact": max(term["exact"] for term in per_term),
             }
 
             for metric in self.averaged:
@@ -204,11 +203,24 @@ class OntologyScorer:
 
         return results
 
+    # results already returned by score_records are passed straight through, so
+    # nothing is scored twice on the way to a frame or an average
+    def _as_results(self, eval_sets):
+        if isinstance(eval_sets, dict):
+            eval_sets = [eval_sets]
+        else:
+            eval_sets = list(eval_sets)
+
+        if eval_sets and "score" in eval_sets[0]:
+            return eval_sets
+
+        return self.score_records(eval_sets)
+
     # flattens to one row per (record, ontology) for aggregate analysis
     def score_frame(self, eval_sets):
         rows = []
 
-        for result in self.score_records(eval_sets):
+        for result in self._as_results(eval_sets):
             for ontology, scored in result["score"].items():
                 row = {
                     "record_id": result.get("record_id"),
@@ -216,15 +228,55 @@ class OntologyScorer:
                     "status": scored["status"],
                     "gold": scored.get("gold"),
                     "n_terms": scored.get("n_terms"),
-                    "exact": scored.get("exact"),
                 }
                 row.update({metric: scored.get(metric) for metric in self.averaged})
                 rows.append(row)
 
         return pd.DataFrame(rows)
 
+    # corpus-level view: one row per ontology, one column per metric, plus an
+    # "all" row pooling every scored pair. A None metric (the pair never reached
+    # the graph) is left out of its mean rather than counted as 0.0, so n_scored
+    # is the ceiling on how many values any one column averaged, not the count.
+    def average_scores(self, scored):
+        frame = scored if isinstance(scored, pd.DataFrame) else self.score_frame(scored)
+        metrics = list(self.averaged)
+        columns = metrics + ["n_scored", "n_records"]
+
+        if frame.empty:
+            return pd.DataFrame(columns=columns)
+
+        # no_gold_term rows hold no metrics, so they fall out of every mean on
+        # their own; grouping the whole frame keeps an ontology the gold standard
+        # could never judge visible as a row of n_scored 0 instead of dropping it
+        graded = frame[frame["status"] == "scored"]
+
+        summary = frame.groupby("ontology")[metrics].mean()
+        summary["n_scored"] = (graded.groupby("ontology").size()
+                               .reindex(summary.index, fill_value=0))
+        summary["n_records"] = frame.groupby("ontology").size()
+
+        order = [ontology for ontology in self.config if ontology in summary.index]
+        order += [ontology for ontology in summary.index if ontology not in order]
+        summary = summary.loc[order]
+
+        summary.loc["all"] = [*frame[metrics].mean(), len(graded), len(frame)]
+        summary[["n_scored", "n_records"]] = summary[["n_scored", "n_records"]].astype(int)
+
+        return summary[columns]
+
+    # both tables in one call for downstream users: the record-by-record frame and
+    # the dataset report built from it, scored once. The individual methods stay
+    # available for callers that want only one of the two.
+    def evaluate(self, eval_sets, output_path=None):
+        frame = self.score_frame(self.score_records(eval_sets, output_path=output_path))
+
+        return frame, self.average_scores(frame)
+
 
 if __name__ == "__main__":
     scorer = OntologyScorer(GOLD_STD)
-    scorer.score_records(eval_set, output_path=OUTPUT_JSON)
-    print(scorer.score_frame(eval_set))
+    frame, report = scorer.evaluate(eval_set, output_path=OUTPUT_JSON)
+    print(frame)
+    print()
+    print(report.round(3))

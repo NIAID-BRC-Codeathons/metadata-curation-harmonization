@@ -25,6 +25,7 @@ SUPPORTED_LLMS: dict[str, str] = {
     "biomedbert": "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract",
     "biomedlm": "stanford-crfm/BioMedLM",
     "biomed_electra": "microsoft/BiomedNLP-BiomedELECTRA-base-uncased-abstract",
+    "sapbert": "cambridgeltl/SapBERT-from-PubMedBERT-fulltext",
 }
 
 
@@ -39,6 +40,7 @@ class EmbeddingGenerator:
                 biomedbert (preferred)
                 biomedlm
                 biomed_electra
+                sapbert
 
         data (NpStrArray | list[str]):
             Array of text documents.
@@ -83,6 +85,7 @@ class EmbeddingGenerator:
     def __init__(self, data, level, model: str = "biomedbert"):
         self.data: npt.NDArray = np.array(data)
         self.level: str = level
+        self.model_name: str = model
         self.embeddings_array: torch.Tensor | None = None
         self._features: npt.NDArray = None
 
@@ -144,6 +147,10 @@ class EmbeddingGenerator:
         # forward pass
         with torch.no_grad():
             outputs = self.model(input_ids, attention_mask=attention_mask)
+
+        if self.model_name == "sapbert":
+            # SapBERT's reference usage takes the [CLS] token representation
+            return outputs.last_hidden_state[:, 0, :]
 
         # mean-pool token embeddings, ignoring padding tokens
         mask = (
@@ -239,7 +246,7 @@ def main():
         "--model",
         help="LLM to use for embedding.",
         choices=list(SUPPORTED_LLMS.keys()),
-        default="biomedbert",
+        default="sapbert",
     )
     parser.add_argument(
         "-o",
