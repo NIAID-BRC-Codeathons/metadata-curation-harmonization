@@ -1,0 +1,160 @@
+[
+  {
+    "record_id": "TEST001",
+    "by_ontology": {
+      "UBERON": [
+        {
+          "term_id": "UBERON:2000298",
+          "term_name": "vent",
+          "label": "vent",
+          "score": 0.9259029626846313,
+          "rank": 0
+        },
+        {
+          "term_id": "UBERON:0003978",
+          "term_name": "valve",
+          "label": "valve",
+          "score": 0.9201659560203552,
+          "rank": 1
+        },
+        {
+          "term_id": "UBERON:0013706",
+          "term_name": "bone spine",
+          "label": "bone spine",
+          "score": 0.9155272841453552,
+          "rank": 2
+        },
+        {
+          "term_id": "UBERON:0009856",
+          "term_name": "sac",
+          "label": "sac",
+          "score": 0.9152777791023254,
+          "rank": 3
+        },
+        {
+          "term_id": "UBERON:0010392",
+          "term_name": "B cell domain",
+          "label": "B cell domain",
+          "score": 0.9025617837905884,
+          "rank": 4
+        },
+        {
+          "term_id": "UBERON:0002464",
+          "term_name": "nerve trunk",
+          "label": "nerve trunk",
+          "score": 0.8980280756950378,
+          "rank": 5
+        },
+        {
+          "term_id": "UBERON:0034729",
+          "term_name": "sympathetic nerve",
+          "label": "sympathetic nerve",
+          "score": 0.8948439359664917,
+          "rank": 6
+        },
+        {
+          "term_id": "UBERON:0008339",
+          "term_name": "microvascular endothelium",
+          "label": "microvascular endothelium",
+          "score": 0.8938201665878296,
+          "rank": 7
+        },
+        {
+          "term_id": "UBERON:0011906",
+          "term_name": "muscle head",
+          "label": "muscle head",
+          "score": 0.8931249380111694,
+          "rank": 8
+        },
+        {
+          "term_id": "UBERON:0010393",
+          "term_name": "T cell domain",
+          "label": "T cell domain",
+          "score": 0.8899368643760681,
+          "rank": 9
+        }
+      ],
+      "MONDO": [
+        {
+          "term_id": "MONDO:0031030",
+          "term_name": "immunodeficiency 107, susceptibility to invasive staphylococcus aureus infection",
+          "label": "immunodeficiency 107, susceptibility to invasive staphylococcus aureus infection",
+          "score": 0.9579588174819946,
+          "rank": 0
+        },
+        {
+          "term_id": "MONDO:0018111",
+          "term_name": "idiopathic severe pneumococcemia",
+          "label": "idiopathic severe pneumococcemia",
+          "score": 0.9563197493553162,
+          "rank": 1
+        },
+        {
+          "term_id": "MONDO:0010603",
+          "term_name": "hemophilia A with vascular abnormality",
+          "label": "hemophilia A with vascular abnormality",
+          "score": 0.9556785821914673,
+          "rank": 2
+        },
+        {
+          "term_id": "MONDO:0000108",
+          "term_name": "bacteremia, susceptibility",
+          "label": "bacteremia, susceptibility",
+          "score": 0.9549630880355835,
+          "rank": 3
+        },
+        {
+          "term_id": "MONDO:0011825",
+          "term_name": "streptococcus, group A, severity of infection by",
+          "label": "streptococcus, group A, severity of infection by",
+          "score": 0.9548908472061157,
+          "rank": 4
+        },
+        {
+          "term_id": "MONDO:0040728",
+          "term_name": "Campylobacter fetus infectious disease",
+          "label": "Campylobacter fetus infectious disease",
+          "score": 0.9521567821502686,
+          "rank": 5
+        },
+        {
+          "term_id": "MONDO:0024313",
+          "term_name": "staphylococcal infection",
+          "label": "staphylococcal infection",
+          "score": 0.9516875147819519,
+          "rank": 6
+        },
+        {
+          "term_id": "MONDO:0002026",
+          "term_name": "candidiasis",
+          "label": "candidiasis",
+          "score": 0.9510805606842041,
+          "rank": 7
+        },
+        {
+          "term_id": "MONDO:0013562",
+          "term_name": "aspergillosis, susceptibility to",
+          "label": "aspergillosis, susceptibility to",
+          "score": 0.9509270191192627,
+          "rank": 8
+        },
+        {
+          "term_id": "MONDO:0040732",
+          "term_name": "Pseudomonas aeruginosa infectious disease",
+          "label": "Pseudomonas aeruginosa infectious disease",
+          "score": 0.9508970975875854,
+          "rank": 9
+        }
+      ]
+    },
+    "queried_fields": {
+      "UBERON": [
+        "isolation_source"
+      ],
+      "MONDO": [
+        "note"
+      ]
+    },
+    "flags": []
+  }
+]
