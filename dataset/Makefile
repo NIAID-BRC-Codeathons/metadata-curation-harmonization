@@ -8,6 +8,10 @@ GOLD_JSON := curated_metadata_expanded.json
 
 all: curated_combined.jsonl
 
+# alt target: download all remote datasets
+#
+download: combined.jsonl.gz
+
 # 1. Download combined.jsonl.gz from NCBI FTP
 combined.jsonl.gz:
 	curl -o $@ "$(FTP_URL)"
