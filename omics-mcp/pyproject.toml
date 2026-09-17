@@ -13,6 +13,7 @@ dependencies = [
 [project.scripts]
 omics-mcp = "omics_mcp.server:main"
 omics-mcp-build = "omics_mcp.build_parquet:main"
+omics-mcp-export = "omics_mcp.export_combined:main"
 
 [build-system]
 requires = ["hatchling"]

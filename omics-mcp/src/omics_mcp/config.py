@@ -61,6 +61,21 @@ def table_source(name):
     return f"{PARQUET_BASE}/{filename}", False
 
 
+def omicidx_source(name):
+    """Return a local OmicIDX file when cached, otherwise its remote URL."""
+
+    filename = f"{name}.parquet"
+    directory = os.environ.get("OMICS_OMICIDX_DIR")
+
+    if directory:
+        path = Path(directory).expanduser().resolve() / filename
+
+        if path.exists():
+            return str(path), True
+
+    return f"{OMICIDX_BASE}/{filename}", False
+
+
 def data_dir():
     """Directory holding the source JSONL extracts."""
 

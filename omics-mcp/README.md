@@ -64,6 +64,7 @@ the hosted location, or set `OMICS_PARQUET_DIR` to use it locally.
 | --- | --- | --- |
 | `OMICS_PARQUET_BASE` | NCBI FTP `pub/datasets/.argonne/parquet` | Hosted `genome`/`bvbrc` Parquet |
 | `OMICS_PARQUET_DIR` | unset | Local Parquet directory; used when the files exist there |
+| `OMICS_OMICIDX_DIR` | unset | Local cached OmicIDX Parquet directory |
 | `OMICS_DATA_DIR` | `.` | Where the source JSONL files live |
 | `OMICS_OMICIDX_BASE` | OmicIDX `latest` | Override to pin a dated snapshot |
 | `OMICS_MAX_ROWS` | `500` | Hard cap on rows returned |
@@ -79,3 +80,38 @@ boundary: anyone who can reach the server can read every registered dataset.
 
 The local Parquet is a point-in-time snapshot while OmicIDX refreshes daily, so
 rerun `omics-mcp-build` and republish when the extracts change.
+
+## Download all Parquet locally
+
+For repeated full exports, download the hosted files once instead of scanning
+OmicIDX over HTTPS for every export:
+
+```bash
+./scripts/download_parquet.sh /data/omics-parquet
+export OMICS_PARQUET_DIR=/data/omics-parquet
+export OMICS_OMICIDX_DIR=/data/omics-parquet
+```
+
+The script downloads the two NCBI-hosted local tables and all OmicIDX tables,
+using four concurrent downloads by default. Set `OMICS_DOWNLOAD_WORKERS` to
+change that concurrency. It prints the environment settings when complete.
+
+Then run the full combined export locally:
+
+```bash
+omics-mcp-export /data/combined.jsonl.gz
+```
+
+To run fixed-size exports in parallel:
+
+```bash
+./scripts/run_parallel_export.sh 8 10000 /data/chunks
+```
+
+This starts 8 jobs with 10,000 genome records per job. Each job writes a
+`chunk-NNNN.jsonl.gz` file and a matching log. The launcher waits for all jobs
+and exits nonzero if any job fails. Merge successful chunks with:
+
+```bash
+gzip -cd /data/chunks/chunk-*.jsonl.gz > /data/chunks/combined.jsonl
+```
