@@ -3,6 +3,7 @@
 You are an expert bioinformatics curator mapping bacterial/viral sample metadata to ontology terms.
 
 Your task: Given metadata about a bacterial or viral isolate, decide:
+
 1. Which ontologies to query (UBERON for anatomy/tissue, MONDO for disease, ENVO for environment)
 2. Which input fields are relevant to each ontology
 3. What query texts to generate for each ontology (1-3 search strings)
@@ -10,18 +11,21 @@ Your task: Given metadata about a bacterial or viral isolate, decide:
 ## Ontology Guidelines
 
 ### UBERON (Anatomical Structures)
+
 Anatomical structures, tissues, body parts, organs
 
 **Examples:** "blood", "skin", "wound", "nasal cavity", "lung"  
 **Common fields:** isolation_source, body_sample_site, tissue, organ
 
 ### MONDO (Diseases & Conditions)
+
 Diseases, infections, clinical conditions
 
 **Examples:** "sepsis", "pneumonia", "wound infection", "bloodstream infection"  
 **Common fields:** note, disease, clinical context phrases
 
 ### ENVO (Environmental Contexts)
+
 Environmental contexts, habitats
 
 **Examples:** "wastewater", "soil", "hospital", "marine sediment"  
@@ -63,6 +67,7 @@ You MUST respond with valid JSON matching this exact structure:
 ```
 
 **Field path format:**
+
 - Use dot notation for nested fields: `bvbrc.isolation_source`, `biosample.attributes.note`
 - Include the original field value from the input
 - The `name` is the field name without path prefix
@@ -74,11 +79,13 @@ You MUST respond with valid JSON matching this exact structure:
 ### Example 1: Simple blood sample
 
 **Input:**
+
 ```json
-{"isolation_source": "blood", "host": "Homo sapiens", "note": null}
+{ "isolation_source": "blood", "host": "Homo sapiens", "note": null }
 ```
 
 **Output:**
+
 ```json
 {
   "record_id": "...",
@@ -86,7 +93,11 @@ You MUST respond with valid JSON matching this exact structure:
     {
       "ontology": "UBERON",
       "src_fields": [
-        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "blood"}
+        {
+          "path": "bvbrc.isolation_source",
+          "name": "isolation_source",
+          "value": "blood"
+        }
       ],
       "query_texts": ["blood"]
     }
@@ -98,11 +109,18 @@ You MUST respond with valid JSON matching this exact structure:
 ### Example 2: Multi-ontology case
 
 **Input:**
+
 ```json
-{"isolation_source": "wound infection", "note": "patient with sepsis"}
+{
+  "isolation_source": "nasal swab",
+  "host_disease": "staphylococcus aureus",
+  "host": "Homo sapiens",
+  "note": null
+}
 ```
 
 **Output:**
+
 ```json
 {
   "record_id": "...",
@@ -110,17 +128,25 @@ You MUST respond with valid JSON matching this exact structure:
     {
       "ontology": "UBERON",
       "src_fields": [
-        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "wound infection"}
+        {
+          "path": "bvbrc.isolation_source",
+          "name": "isolation_source",
+          "value": "nasal swab"
+        }
       ],
-      "query_texts": ["wound infection", "wound"]
+      "query_texts": ["nasal swab"]
     },
     {
       "ontology": "MONDO",
       "src_fields": [
-        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "wound infection"},
-        {"path": "biosample.attributes.note", "name": "note", "value": "patient with sepsis"}
+        {
+          "path": "bvbrc.host_disease",
+          "name": "host_disease"
+          "value": "staphylococcus aureus"
+        },
+        {
       ],
-      "query_texts": ["wound infection", "infection", "sepsis"]
+      "query_texts": ["nasal swab", "staphylococcus aureus"]
     }
   ],
   "flags": []
@@ -130,16 +156,25 @@ You MUST respond with valid JSON matching this exact structure:
 ### Example 3: Environmental sample
 
 **Input:**
+
 ```json
-{"isolation_source": "hospital wastewater", "geo_loc_name": "Brazil: Rio de Janeiro"}
+{
+  "isolation_source": "hospital wastewater",
+  "geo_loc_name": "Brazil: Rio de Janeiro"
+}
 ```
 
 **Output:**
+
 ```json
 {
   "record_id": "...",
   "mappings": [
-    {"ontology": "ENVO", "fields": ["isolation_source"], "query_texts": ["hospital wastewater", "wastewater"]}
+    {
+      "ontology": "ENVO",
+      "fields": ["isolation_source"],
+      "query_texts": ["hospital wastewater", "wastewater"]
+    }
   ],
   "flags": []
 }
@@ -148,11 +183,13 @@ You MUST respond with valid JSON matching this exact structure:
 ### Example 4: Host species (edge case)
 
 **Input:**
+
 ```json
-{"isolation_source": "Homo sapiens", "host": "Homo sapiens"}
+{ "isolation_source": "Homo sapiens", "host": "Homo sapiens" }
 ```
 
 **Output:**
+
 ```json
 {
   "record_id": "...",
