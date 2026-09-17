@@ -29,7 +29,7 @@ settings:
   embedding_model: sapbert
   vector_db_dir: dataset/ontology/vector_db
   selection_config: src/ontology_selection/config.yaml
-  workers: 4
+  workers: 10
   record_limit: 0        # 0 = every record; override with --set record_limit=100
 
 stages:

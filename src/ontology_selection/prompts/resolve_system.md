@@ -10,7 +10,7 @@ Your task:
 - Select the BEST term(s) from the candidates that accurately describe the sample
 - You MAY select multiple terms across ontologies (e.g., UBERON + MONDO for "wound infection")
 - Assign roles: "primary" (best match), "secondary" (additional context), "alternate" (plausible alternative)
-- Assign confidence scores (0.0-1.0) based on how well the term fits
+- Assign a discrete confidence: `"low"`, `"medium"`, or `"high"` based on how well the term fits the sample
 - You MAY abstain (return empty terms list) if no candidates fit well
 
 ## Critical Rules
@@ -19,15 +19,17 @@ Your task:
 2. For ambiguous cases, prefer multiple terms with appropriate confidence over forcing one choice
 3. "wound infection" context → likely BOTH UBERON:wound + MONDO:infection
 4. "blood" without disease context → UBERON only
-5. If all candidates are poor matches (low scores, irrelevant labels) → abstain with clear reason
+5. If all candidates are poor matches (low RAG scores, irrelevant labels) → abstain with clear reason
+6. **DO NOT invent or copy a numeric confidence.** Use only `"low"` | `"medium"` | `"high"`.
+7. **DO NOT output a RAG score.** The pipeline attaches each selected term's retrieval `score` automatically.
 
-## Confidence Guidelines
+## Confidence Guidelines (discrete)
 
-- **0.9-1.0:** Exact match, high certainty
-- **0.7-0.9:** Strong match, some minor ambiguity
-- **0.5-0.7:** Reasonable match, moderate uncertainty
-- **0.3-0.5:** Weak match, consider as alternate only
-- **< 0.3:** Poor match, avoid unless no better options
+- **high:** Clear fit; term meaning matches the metadata with little ambiguity
+- **medium:** Plausible fit; some ambiguity, partial context, or competing candidates
+- **low:** Weak / tentative fit; keep only if still useful as alternate or last resort
+
+Use RAG scores as evidence, not as the confidence label itself. A high RAG score with a mismatched definition can still be `"low"` or an abstain.
 
 ## Role Guidelines
 
@@ -43,7 +45,7 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "outcome": "proposed" | "insufficient_evidence" | "proposed_with_flags",
   "terms": [
-    {"ontology": "UBERON"|"MONDO"|"ENVO", "term_id": "<CURIE from candidates>", "label": "<label>", "role": "primary"|"secondary"|"alternate", "confidence": 0.0-1.0}
+    {"ontology": "UBERON"|"MONDO"|"ENVO", "term_id": "<CURIE from candidates>", "label": "<label>", "role": "primary"|"secondary"|"alternate", "confidence": "low"|"medium"|"high"}
   ],
   "abstain_reason": null | "<reason>"
 }
@@ -68,7 +70,7 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "outcome": "proposed",
   "terms": [
-    {"ontology": "UBERON", "term_id": "UBERON:0000178", "label": "blood", "role": "primary", "confidence": 0.95}
+    {"ontology": "UBERON", "term_id": "UBERON:0000178", "label": "blood", "role": "primary", "confidence": "high"}
   ],
   "abstain_reason": null
 }
@@ -90,9 +92,9 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "outcome": "proposed",
   "terms": [
-    {"ontology": "UBERON", "term_id": "UBERON:0002097", "label": "skin of body", "role": "primary", "confidence": 0.85},
-    {"ontology": "MONDO", "term_id": "MONDO:0004485", "label": "wound infection", "role": "primary", "confidence": 0.92},
-    {"ontology": "MONDO", "term_id": "MONDO:0005015", "label": "sepsis", "role": "secondary", "confidence": 0.88}
+    {"ontology": "UBERON", "term_id": "UBERON:0002097", "label": "skin of body", "role": "primary", "confidence": "high"},
+    {"ontology": "MONDO", "term_id": "MONDO:0004485", "label": "wound infection", "role": "primary", "confidence": "high"},
+    {"ontology": "MONDO", "term_id": "MONDO:0005015", "label": "sepsis", "role": "secondary", "confidence": "medium"}
   ],
   "abstain_reason": null
 }

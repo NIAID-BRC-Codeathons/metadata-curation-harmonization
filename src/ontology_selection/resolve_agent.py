@@ -8,7 +8,7 @@ best represent the sample metadata.
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
-from typing import Dict, Any
+from typing import Any, Dict
 from pathlib import Path
 import logging
 import json
@@ -17,6 +17,54 @@ from .models import RAGOutput, ResolveOutput, ResolvedTerm, RAGBucket
 from .utils import get_argo_llm, format_metadata_for_prompt
 
 logger = logging.getLogger(__name__)
+
+_VALID_CONFIDENCE = {"low", "medium", "high"}
+
+
+def _normalize_confidence(value: Any) -> str:
+    """
+    Coerce LLM confidence to low|medium|high.
+
+    Accepts the discrete labels, or legacy numeric scores if the model
+    still emits floats.
+    """
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"med", "mid"}:
+            return "medium"
+        if normalized in _VALID_CONFIDENCE:
+            return normalized
+
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return "medium"
+
+    if score >= 0.7:
+        return "high"
+    if score >= 0.4:
+        return "medium"
+    return "low"
+
+
+def _candidate_scores(rag_output: RAGOutput) -> Dict[str, float]:
+    """Best RAG score per CURIE across buckets."""
+    best: Dict[str, float] = {}
+    for bucket in rag_output.buckets:
+        for candidate in bucket.candidates:
+            prev = best.get(candidate.curie)
+            if prev is None or candidate.score > prev:
+                best[candidate.curie] = float(candidate.score)
+    return best
+
+
+def _confidence_from_rag_score(score: float) -> str:
+    """Fallback-only mapping when the LLM path fails."""
+    if score >= 0.8:
+        return "high"
+    if score >= 0.5:
+        return "medium"
+    return "low"
 
 
 def load_prompt(prompt_name: str) -> str:
@@ -104,9 +152,10 @@ class ResolveAgent:
             if isinstance(result, str):
                 result = json.loads(result)
             
-            # Convert terms to ResolvedTerm objects
+            # Convert terms to ResolvedTerm objects; attach RAG score from retrieval
             terms = []
             flags = []
+            scores_by_curie = _candidate_scores(rag_output)
             
             for term_data in result.get('terms', []):
                 term_id = term_data.get('term_id')
@@ -116,8 +165,21 @@ class ResolveAgent:
                     logger.warning(f"LLM invented CURIE {term_id} not in candidates, skipping")
                     flags.append("invented_curie_removed")
                     continue
+
+                rag_score = scores_by_curie.get(term_id)
+                if rag_score is None:
+                    logger.warning(f"Missing RAG score for {term_id}, skipping")
+                    flags.append("missing_rag_score")
+                    continue
                 
-                terms.append(ResolvedTerm(**term_data))
+                terms.append(ResolvedTerm(
+                    ontology=term_data.get('ontology'),
+                    term_id=term_id,
+                    label=term_data.get('label') or "",
+                    role=term_data.get('role', 'primary'),
+                    confidence=_normalize_confidence(term_data.get('confidence')),
+                    rag_score=rag_score,
+                ))
             
             # Build ResolveOutput
             resolve_output = ResolveOutput(
@@ -207,7 +269,8 @@ class ResolveAgent:
                     term_id=top_candidate.curie,
                     label=top_candidate.label,
                     role="primary",
-                    confidence=top_candidate.score
+                    confidence=_confidence_from_rag_score(top_candidate.score),
+                    rag_score=float(top_candidate.score),
                 ))
         
         outcome = "proposed_with_flags" if terms else "insufficient_evidence"

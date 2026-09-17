@@ -20,7 +20,7 @@ System prompt for the Resolve Agent.
 **Purpose:** Selects final ontology terms from RAG candidates:
 - Picks best matching terms
 - Assigns roles (primary, secondary, alternate)
-- Assigns confidence scores
+- Assigns discrete confidence (`low` / `medium` / `high`); pipeline attaches RAG `rag_score`
 - Can select multiple terms across ontologies
 
 **Used by:** `resolve_agent.py`
