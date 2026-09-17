@@ -1,4 +1,9 @@
 # downloaded datasets
 combined.jsonl.gz
 nohup.out
+# extracted datasets
+combined.jsonl
+curated_assembly_accessions.tsv
+curated_combined.jsonl
+
 
