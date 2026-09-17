@@ -3,9 +3,9 @@
 # Each stage runs to completion, as its own process, in its own conda environment,
 # handing work to the next stage as a file. Stages are run by the orchestrator:
 #
-#     python -m orchestrator --dry-run
-#     python -m orchestrator
-#     python -m orchestrator --only retrieve
+#     python3 -m orchestrator --dry-run
+#     python3 -m orchestrator
+#     python3 -m orchestrator --only retrieve
 
 workdir: .   # relative to this file
 
@@ -37,7 +37,7 @@ stages:
   - name: plan
     env: ontology-selection
     command: >
-      python -m ontology_selection.select_ontology
+      python3 -m ontology_selection.select_ontology
       --input {records} --output {plans}
       --config {selection_config} --workers {workers} --limit {record_limit}
     inputs:  [records]
@@ -47,7 +47,7 @@ stages:
   - name: embed
     env: embeddings
     command: >
-      python scripts/embed_query_records.py
+      python3 scripts/embed_query_records.py
       -i {plans} -m {embedding_model} -o {embeddings}
     inputs:  [plans]
     outputs: [embeddings]
@@ -56,7 +56,7 @@ stages:
   - name: retrieve
     env: metadata-curation
     command: >
-      python -m ontology_rag.rag
+      python3 -m ontology_rag.rag
       -i {plans} -e {embeddings} -v {vector_db_dir} -k {top_k}
       --metric {metric} --device {device}
       --low-score-threshold {low_score_threshold} -o {rag_results}
@@ -67,7 +67,7 @@ stages:
   - name: resolve
     env: ontology-selection
     command: >
-      python -m ontology_selection.resolve
+      python3 -m ontology_selection.resolve
       --rag-results {rag_results} --records {records} --output {proposals}
       --config {selection_config} --top-k {top_k} --workers {workers}
     inputs:  [rag_results, records]
