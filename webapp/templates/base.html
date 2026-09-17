@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Engine Explorer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">e<span>.</span></span><span>engine<span class="brand-light">explorer</span></span></a>
+  <div class="workspace-label"><span class="workspace-avatar">L</span><span>Local workspace<small>Your engine. Your data.</small></span></div>
+  <div class="nav-heading">WORKSPACE</div>
+  <a class="nav-link selected" href="{{ url_for('index') }}"><span>▦</span> Data explorer <span class="nav-count">{{ datasets|length }}</span></a>
+  <div class="nav-heading dataset-heading">DATASETS <button class="icon-button" data-open="import-dialog" aria-label="Import a dataset">+</button></div>
+  <nav class="dataset-nav" aria-label="Datasets">
+    {% for item in datasets %}<a class="dataset-link {{ 'active' if active_id == item.id }}" href="{{ url_for('explore', dataset_id=item.id) }}"><span class="dataset-dot"></span><span class="dataset-name">{{ item.name }}</span><small>{{ item.record_count|number }}</small></a>{% else %}<p class="sidebar-hint">Imported datasets will appear here.</p>{% endfor %}
+  </nav>
+  <div class="sidebar-bottom"><span class="connection-dot"></span> SQLite connected<small>Stored in your workspace</small></div>
+</aside>
+<div class="app-shell">
+  <header class="topbar"><div class="breadcrumbs">Workspace <span>/</span> <strong>Data explorer</strong></div><span class="local-badge"><span class="connection-dot"></span> Local instance</span></header>
+  <main>
+    {% for category, message in get_flashed_messages(with_categories=true) %}<div class="notice {{ category }}" role="status">✓ {{ message }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+    <footer class="page-footer"><span>ENGINE EXPLORER</span><span>JSONL in. Insights out.</span></footer>
+  </main>
+</div>
+<dialog id="import-dialog">
+  <div class="dialog-heading"><div><span class="eyebrow">ADD A DATASET</span><h2>Import engine output</h2></div><button class="icon-button" data-close aria-label="Close import dialog">×</button></div>
+  <p class="muted">Upload a JSONL file. Each line becomes a record, and fields become selectable columns.</p>
+  <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" id="import-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label class="form-label" for="dataset-name">Dataset name <span class="muted">(optional)</span></label><input id="dataset-name" name="name" placeholder="e.g. Materials screening — run 04" maxlength="200">
+    <label class="upload-zone" for="jsonl-file"><span class="upload-icon">↥</span><strong>Choose a JSONL file</strong><span>UTF-8 · .jsonl or .ndjson · up to 128 MiB</span><input type="file" id="jsonl-file" name="file" accept=".jsonl,.ndjson,.json,application/x-ndjson" required></label>
+    <p class="form-note">Nested fields are discovered automatically. For larger files, use the command-line importer.</p>
+    <div class="dialog-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Import dataset <span>↗</span></button></div>
+  </form>
+</dialog>
+</body>
+</html>

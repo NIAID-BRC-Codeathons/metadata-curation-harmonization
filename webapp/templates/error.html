@@ -1,0 +1,2 @@
+{% extends 'base.html' %}
+{% block content %}<div class="empty-hero"><span class="hero-icon">!</span><span class="eyebrow">LET’S TRY THAT AGAIN</span><h1>Couldn’t complete that request</h1><p role="alert">{{ message }}</p><a class="button primary" href="{{ url_for('index') }}">Back to explorer →</a></div>{% endblock %}
