@@ -161,7 +161,7 @@ def main():
     """)
     con.execute("""
         CREATE TEMP TABLE linked_bioprojects AS
-        SELECT p.* FROM bioprojects p
+        SELECT p.* EXCLUDE (locus_tags) FROM bioprojects p
         JOIN relevant_bioproject_keys k ON k.accession = p.accession
     """)
     con.execute("""
