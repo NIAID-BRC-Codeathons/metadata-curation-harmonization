@@ -56,7 +56,7 @@ field_selection:
 # Parallelization Settings
 # Stage commands, artifact paths and RAG settings live in ../../pipeline.yaml.
 parallelism:
-  max_workers: 1  # Number of records to process concurrently (increase to 10+ for production)
+  max_workers: 10  # Number of records to process concurrently (increase to 10+ for production)
   stage_parallelism: true  # Enable parallel RAG calls within a single record (UBERON/MONDO/ENVO)
   batch_size: 100  # For batch processing modes
 
