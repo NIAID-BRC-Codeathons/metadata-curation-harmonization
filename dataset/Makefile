@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-FTP_URL    := https://ftp.ncbi.nlm.nih.gov/.baby/datafiles/.argonne/combined.jsonl.gz
+FTP_URL    := https://ftp.ncbi.nlm.nih.gov/pub/datasets/.argonne/combined.v2.jsonl.gz
 FILTER     := ../scripts/filter_jsonl_by_assembly_accession.py
 SELECT     := ../scripts/select_unique_field_records.py
 GOLD_JSON  := curated_metadata_expanded.json
