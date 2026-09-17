@@ -152,15 +152,16 @@ def check_resolve(resolve: ResolveOutput) -> ResolveOutput:
                 resolve.flags.append("multiple_primary_same_ontology")
             logger.warning(f"Resolve {resolve.record_id}: {count} primary terms for {ontology}")
     
-    # Confidence out of valid range (should be caught by Pydantic, but double-check)
+    # Confidence must be discrete low/medium/high (Pydantic enforces; soft-flag anyway)
+    valid_confidence = {"low", "medium", "high"}
     for term in resolve.terms:
-        if not (0.0 <= term.confidence <= 1.0):
+        if term.confidence not in valid_confidence:
             if "invalid_confidence" not in resolve.flags:
                 resolve.flags.append("invalid_confidence")
     
-    # Low confidence primary terms (< 0.5)
+    # Low-confidence primary terms need human attention
     for term in resolve.terms:
-        if term.role == "primary" and term.confidence < 0.5:
+        if term.role == "primary" and term.confidence == "low":
             if "low_confidence_primary" not in resolve.flags:
                 resolve.flags.append("low_confidence_primary")
     

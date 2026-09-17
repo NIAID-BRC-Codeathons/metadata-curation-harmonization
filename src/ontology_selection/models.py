@@ -158,12 +158,15 @@ class ResolvedTerm(BaseModel):
     One selected ontology term with metadata.
     
     The Resolve agent picks these from RAG candidates.
+    `confidence` is a discrete curator judgment (not a free float).
+    `rag_score` is the retrieval similarity for that CURIE (passed through).
     """
     ontology: Literal["UBERON", "MONDO", "ENVO"]
     term_id: str  # CURIE, e.g., "UBERON:0002097"
     label: str
     role: Literal["primary", "secondary", "alternate"]
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: Literal["low", "medium", "high"]
+    rag_score: float = Field(ge=0.0, le=1.0)
 
 
 class ResolveOutput(BaseModel):
@@ -182,14 +185,16 @@ class ResolveOutput(BaseModel):
           "term_id": "UBERON:0002097",
           "label": "skin of body",
           "role": "primary",
-          "confidence": 0.85
+          "confidence": "high",
+          "rag_score": 0.88
         },
         {
           "ontology": "MONDO",
           "term_id": "MONDO:0004485",
           "label": "wound infection",
           "role": "secondary",
-          "confidence": 0.78
+          "confidence": "medium",
+          "rag_score": 0.85
         }
       ],
       "candidate_curies": ["UBERON:0002097", "UBERON:0000178", "MONDO:0004485"],
