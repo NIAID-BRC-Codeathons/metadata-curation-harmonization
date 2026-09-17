@@ -42,7 +42,11 @@ class OntologyPipeline:
         self.max_workers = config.get('parallelism', {}).get('max_workers', 1)
         self.save_intermediate = config.get('output', {}).get('save_intermediate', True)
         
-        logger.info(f"Pipeline initialized: max_workers={self.max_workers}")
+        # Intermediate storage (for batch saving)
+        self.plan_outputs = []
+        self.rag_outputs = []
+        
+        logger.info(f"Pipeline initialized: max_workers={self.max_workers}, save_intermediate={self.save_intermediate}")
     
     def process_record(self, record: RecordInput) -> ResolveOutput:
         """
@@ -61,12 +65,20 @@ class OntologyPipeline:
         plan_output = run_checks(plan_output, stage="plan")
         logger.debug(f"  Plan: {len(plan_output.mappings)} mappings, flags={plan_output.flags}")
         
+        # Store for intermediate saving
+        if self.save_intermediate:
+            self.plan_outputs.append(plan_output)
+        
         # Step 2: Retrieve (RAG)
         rag_output = self.rag_client.retrieve(plan_output)
         rag_output = run_checks(rag_output, stage="retrieve")
         logger.debug(f"  RAG: {len(rag_output.buckets)} buckets, "
                     f"{sum(len(b.candidates) for b in rag_output.buckets)} candidates, "
                     f"flags={rag_output.flags}")
+        
+        # Store for intermediate saving
+        if self.save_intermediate:
+            self.rag_outputs.append(rag_output)
         
         # Step 3: Resolve
         original_metadata = record.model_dump(exclude={'extras'}, exclude_none=True)
@@ -145,6 +157,10 @@ class OntologyPipeline:
         # Save outputs if requested
         if save_outputs:
             self._save_results(results)
+            
+            # Save intermediate outputs
+            if self.save_intermediate:
+                self._save_intermediate_outputs()
         
         # Print summary statistics
         self._print_summary(results)
@@ -161,6 +177,22 @@ class OntologyPipeline:
         output_path = self.config.get('output', {}).get('final_proposals', 'data/out/proposals.jsonl')
         save_jsonl(results, output_path)
         logger.info(f"Saved {len(results)} results to {output_path}")
+    
+    def _save_intermediate_outputs(self):
+        """
+        Save intermediate Plan and RAG outputs to disk.
+        """
+        # Save Plan outputs
+        if self.plan_outputs:
+            plan_path = self.config.get('output', {}).get('intermediate_plan', 'data/intermediate/plan_outputs.jsonl')
+            save_jsonl(self.plan_outputs, plan_path)
+            logger.info(f"Saved {len(self.plan_outputs)} plan outputs to {plan_path}")
+        
+        # Save RAG outputs
+        if self.rag_outputs:
+            rag_path = self.config.get('output', {}).get('intermediate_rag', 'data/intermediate/rag_results.jsonl')
+            save_jsonl(self.rag_outputs, rag_path)
+            logger.info(f"Saved {len(self.rag_outputs)} RAG outputs to {rag_path}")
     
     def _print_summary(self, results: List[ResolveOutput]):
         """

@@ -316,7 +316,44 @@ rag.py --input in.json --top-k 10 --model biomedbert \
        --outfile out.json
 ```
 
-## Output Format
+## Output Files
+
+### Intermediate Outputs (for debugging)
+
+When `save_intermediate: true` in `config.yaml` (default), the pipeline saves:
+
+**1. Plan outputs** (`data/intermediate/plan_outputs.jsonl`):
+```json
+{
+  "record_id": "TEST001",
+  "mappings": [
+    {"ontology": "UBERON", "fields": ["isolation_source"], "query_texts": ["blood"]},
+    {"ontology": "MONDO", "fields": ["note"], "query_texts": ["bloodstream infection"]}
+  ],
+  "flags": []
+}
+```
+
+**2. RAG outputs** (`data/intermediate/rag_results.jsonl`):
+```json
+{
+  "record_id": "TEST001",
+  "buckets": [
+    {
+      "ontology": "UBERON",
+      "fields": ["isolation_source"],
+      "query_texts": ["blood"],
+      "candidates": [
+        {"curie": "UBERON:0000178", "label": "blood", "score": 0.95, "rank": 0}
+      ]
+    }
+  ]
+}
+```
+
+These files show exactly what was passed between pipeline stages, making debugging easier.
+
+### Final Output Format
 
 The pipeline produces `proposals.jsonl` with one JSON object per line:
 
