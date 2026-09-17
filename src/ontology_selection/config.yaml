@@ -8,20 +8,6 @@ llm:
   max_tokens: 4096
   base_url: https://apps.inside.anl.gov/argoapi/v1
 
-# RAG System Interface
-rag:
-  # Command to invoke RAG retrieval system
-  # Example: python /path/to/rag.py
-  command: "python3 scripts/00_mock_rag.py"
-  
-  # RAG parameters
-  top_k: 10
-  model: biomedbert
-  metric: cosine
-  device: cpu  # or gpu
-  low_score_threshold: 0.70
-  timeout: 300  # seconds
-
 # Ontology Mappings
 ontologies:
   UBERON:
@@ -68,6 +54,7 @@ field_selection:
   flatten_attributes: true
 
 # Parallelization Settings
+# Stage commands, artifact paths and RAG settings live in ../../pipeline.yaml.
 parallelism:
   max_workers: 1  # Number of records to process concurrently (increase to 10+ for production)
   stage_parallelism: true  # Enable parallel RAG calls within a single record (UBERON/MONDO/ENVO)
@@ -78,10 +65,3 @@ logging:
   level: INFO  # DEBUG, INFO, WARNING, ERROR
   file: data/out/pipeline.log
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-# Output Settings
-output:
-  intermediate_plan: data/intermediate/plan_outputs.jsonl
-  intermediate_rag: data/intermediate/rag_results.jsonl
-  final_proposals: data/out/proposals.jsonl
-  save_intermediate: true  # Save Plan and RAG outputs for debugging

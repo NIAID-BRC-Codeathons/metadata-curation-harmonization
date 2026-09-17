@@ -110,13 +110,9 @@ def check_retrieve(rag: RAGOutput) -> RAGOutput:
                 if flag not in rag.flags:
                     rag.flags.append(flag)
     
-    # Check for missing definitions (optional but helpful)
-    for bucket in rag.buckets:
-        for candidate in bucket.candidates[:3]:  # Check top 3
-            if candidate.definition is None:
-                if "missing_definition" not in rag.flags:
-                    rag.flags.append("missing_definition")
-                break
+    # No missing_definition check: the vector database carries term ids and names
+    # only, so it would fire on every record and make `outcome` constant. Restore
+    # it once the vector database is rebuilt with definitions.
     
     return rag
 

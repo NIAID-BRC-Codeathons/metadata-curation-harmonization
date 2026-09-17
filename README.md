@@ -48,20 +48,52 @@ Team assignments are still being finalized. Participants can review their projec
 
 This repository is the team's working space for the codeathon — code, notebooks, data pointers, and notes. Replace this README with the real thing once the charter is written. Team members get access through the [NIAID-BRC-Codeathons](https://github.com/NIAID-BRC-Codeathons) organization; accept the invitation if you have not already.
 
+## Running the pipeline
+
+The engine runs as four stages - `plan -> embed -> retrieve -> resolve` - each to
+completion, each in its own conda environment, handing work to the next as a file.
+Stage commands and all pipeline-wide settings live in `pipeline.yaml`.
+
+```bash
+conda run -n orchestrator python scripts/run_pipeline.py --dry-run   # print commands, run nothing
+conda run -n orchestrator python scripts/run_pipeline.py             # run everything
+conda run -n orchestrator python scripts/run_pipeline.py --only retrieve
+conda run -n orchestrator python scripts/run_pipeline.py --from embed
+```
+
+| Stage | Environment | Reads | Writes |
+|---|---|---|---|
+| `plan` | `ontology-selection` | `data/raw/records.jsonl` | `data/intermediate/plan_outputs.jsonl` |
+| `embed` | `embeddings` | the plans | `data/intermediate/query_embeddings.parquet` |
+| `retrieve` | `metadata-curation` | plans + embeddings | `data/intermediate/rag_results.jsonl` |
+| `resolve` | `ontology-selection` | RAG results + records | `data/out/proposals.jsonl` |
+
+Four stages rather than one process because the retrieval stage is batched over the
+whole corpus (each FAISS index is built once, not once per record), and because torch
+and faiss cannot share an interpreter. See `src/orchestrator/README.md`.
+
+The engine's data contracts are in `src/engine.md`.
+
 ## Environment
 
 - We will use the FAISS (Facebook AI Similiarity Search) vector database package for the ontology RAG implementation. FAISS requires `conda` to install, so we will need to use a `conda` environment for that, at least. I would rather use `pixi`, but I assume most people are more familiar with `conda` anyways so this works.
   - See `environment.yaml` for the environment build.
 
-Install `conda` dependencies:
+Four environments, one per stage plus the orchestrator:
 
 ```bash
-conda env create -n metadata-curation -f environment.yaml
-conda activate metadata-curation
+conda env create -f environment.yaml                    # metadata-curation (faiss, retrieval)
+conda env create -f pytorch_environment.yaml            # embeddings (torch, embedding)
+conda env create -f src/ontology_selection/environment.yaml   # ontology-selection (langchain)
+conda env create -f src/orchestrator/environment.yaml   # orchestrator (pyyaml only)
 ```
 
-With the environment activated, install PyPI dependencies.
+`metadata-curation` also needs its PyPI dependencies:
 
 ```bash
+conda activate metadata-curation
 pip install -r requirements.txt
 ```
+
+The LLM stages need an Argo username: copy `src/ontology_selection/.env.example` to
+`.env` beside it and set `ARGO_USER`.
