@@ -40,7 +40,7 @@ This will process test records and save results to `data/out/proposals.jsonl`.
 ```bash
 # Process BV-BRC records (first 100)
 python scripts/02_run_pipeline.py \
-    --input ../sample.input.jsonl \
+    --input ../data/inputs/sample.input.jsonl \
     --output data/out/proposals.jsonl \
     --limit 100
 ```
