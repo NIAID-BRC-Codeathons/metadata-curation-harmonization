@@ -41,7 +41,7 @@ def main() -> None:
         "-m",
         "--model",
         choices=list(SUPPORTED_LLMS),
-        default="biomedbert",
+        default="sapbert",
         help="LLM to use for embedding the query text.",
     )
     parser.add_argument(
