@@ -101,3 +101,17 @@ Then run the full combined export locally:
 ```bash
 omics-mcp-export /data/combined.jsonl.gz
 ```
+
+To run fixed-size exports in parallel:
+
+```bash
+./scripts/run_parallel_export.sh 8 10000 /data/chunks
+```
+
+This starts 8 jobs with 10,000 genome records per job. Each job writes a
+`chunk-NNNN.jsonl.gz` file and a matching log. The launcher waits for all jobs
+and exits nonzero if any job fails. Merge successful chunks with:
+
+```bash
+gzip -cd /data/chunks/chunk-*.jsonl.gz > /data/chunks/combined.jsonl
+```
