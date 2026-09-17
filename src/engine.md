@@ -233,7 +233,8 @@ Same cardinality and keys as Plan `mappings` (aligned by `ontology`).
       "label": "skin of body",
       "definition": "The organ covering the body that consists of dermis and epidermis.",
       "role": "primary",
-      "confidence": 0.8
+      "confidence": "high",
+      "rag_score": 0.88
     },
     {
       "field": "isolation_source",
@@ -242,7 +243,8 @@ Same cardinality and keys as Plan `mappings` (aligned by `ontology`).
       "label": "wound infection",
       "definition": "An infection that involves a wound.",
       "role": "secondary",
-      "confidence": 0.7
+      "confidence": "medium",
+      "rag_score": 0.85
     }
   ],
   "candidate_curies": ["UBERON:0002097", "MONDO:0004485"],
