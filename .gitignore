@@ -1,0 +1,4 @@
+# Mac osx cruft
+.DS_Store
+# python temp
+__pycache__
