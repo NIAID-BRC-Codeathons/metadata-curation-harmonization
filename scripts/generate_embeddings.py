@@ -114,7 +114,7 @@ def main():
         "--model",
         help="LLM to use for embedding.",
         choices=list(SUPPORTED_LLMS.keys()),
-        default="biomedbert",
+        default="sapbert",
     )
     parser.add_argument(
         "--id-column",
