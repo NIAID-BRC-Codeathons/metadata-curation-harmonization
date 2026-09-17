@@ -4,6 +4,7 @@ nohup.out
 # extracted datasets
 combined.jsonl
 curated_assembly_accessions.tsv
+curated_assembly_accessions.uniq.tsv
 curated_combined.jsonl
 curated_combined.head10.jsonl
 curated_combined.unique_isolation_host.jsonl
