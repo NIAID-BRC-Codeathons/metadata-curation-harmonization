@@ -22,7 +22,7 @@ Diseases, infections, clinical conditions
 **Common fields:** note, disease, clinical context phrases
 
 ### ENVO (Environmental Contexts)
-Environmental contexts, habitats, geographic locations
+Environmental contexts, habitats
 
 **Examples:** "wastewater", "soil", "hospital", "marine sediment"  
 **Common fields:** isolation_source, geo_loc_name, environment, habitat
@@ -49,11 +49,23 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "record_id": "<same as input>",
   "mappings": [
-    {"ontology": "UBERON" | "MONDO" | "ENVO", "fields": ["field1", "field2"], "query_texts": ["query1", "query2"]}
+    {
+      "ontology": "UBERON" | "MONDO" | "ENVO",
+      "src_fields": [
+        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "blood"},
+        {"path": "biosample.attributes.note", "name": "note", "value": "patient with sepsis"}
+      ],
+      "query_texts": ["query1", "query2"]
+    }
   ],
   "flags": ["flag1", "flag2"]
 }
 ```
+
+**Field path format:**
+- Use dot notation for nested fields: `bvbrc.isolation_source`, `biosample.attributes.note`
+- Include the original field value from the input
+- The `name` is the field name without path prefix
 
 **IMPORTANT:** DO NOT include any explanatory text, only the JSON object.
 
@@ -71,7 +83,13 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "record_id": "...",
   "mappings": [
-    {"ontology": "UBERON", "fields": ["isolation_source"], "query_texts": ["blood"]}
+    {
+      "ontology": "UBERON",
+      "src_fields": [
+        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "blood"}
+      ],
+      "query_texts": ["blood"]
+    }
   ],
   "flags": []
 }
@@ -89,8 +107,21 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "record_id": "...",
   "mappings": [
-    {"ontology": "UBERON", "fields": ["isolation_source"], "query_texts": ["wound infection", "wound"]},
-    {"ontology": "MONDO", "fields": ["isolation_source", "note"], "query_texts": ["wound infection", "infection", "sepsis"]}
+    {
+      "ontology": "UBERON",
+      "src_fields": [
+        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "wound infection"}
+      ],
+      "query_texts": ["wound infection", "wound"]
+    },
+    {
+      "ontology": "MONDO",
+      "src_fields": [
+        {"path": "bvbrc.isolation_source", "name": "isolation_source", "value": "wound infection"},
+        {"path": "biosample.attributes.note", "name": "note", "value": "patient with sepsis"}
+      ],
+      "query_texts": ["wound infection", "infection", "sepsis"]
+    }
   ],
   "flags": []
 }
@@ -108,8 +139,7 @@ You MUST respond with valid JSON matching this exact structure:
 {
   "record_id": "...",
   "mappings": [
-    {"ontology": "ENVO", "fields": ["isolation_source"], "query_texts": ["hospital wastewater", "wastewater"]},
-    {"ontology": "UBERON", "fields": ["isolation_source"], "query_texts": ["hospital"]}
+    {"ontology": "ENVO", "fields": ["isolation_source"], "query_texts": ["hospital wastewater", "wastewater"]}
   ],
   "flags": []
 }
@@ -130,3 +160,5 @@ You MUST respond with valid JSON matching this exact structure:
   "flags": ["looks_like_host"]
 }
 ```
+
+**Note:** No mappings when flagged as host species - src_fields would be empty

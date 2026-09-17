@@ -51,6 +51,17 @@ class RecordInput(BaseModel):
 # PLAN AGENT OUTPUT (engine.md section 6.2)
 # ============================================================================
 
+class SourceField(BaseModel):
+    """
+    Source field with path and value.
+    
+    Tracks which input fields were used and their values.
+    """
+    path: str  # JSON path, e.g., "bvbrc.isolation_source" or "biosample.attributes.note"
+    name: str  # Field name, e.g., "isolation_source", "note"
+    value: Optional[str] = None  # Original field value
+
+
 class PlanMapping(BaseModel):
     """
     One mapping = one ontology + the fields/queries targeting it.
@@ -59,7 +70,7 @@ class PlanMapping(BaseModel):
     based on specific input fields.
     """
     ontology: Literal["UBERON", "MONDO", "ENVO"]
-    fields: List[str]  # Field names from RecordInput, e.g., ["isolation_source", "note"]
+    src_fields: List[SourceField]  # Source fields with paths and values
     query_texts: List[str]  # 1-3 search strings, e.g., ["wound infection", "wound", "infection"]
 
 
@@ -108,7 +119,7 @@ class RAGBucket(BaseModel):
     One bucket per ontology queried.
     """
     ontology: Literal["UBERON", "MONDO", "ENVO"]
-    fields: List[str]  # Echo from PlanMapping
+    src_fields: List[SourceField]  # Echo from PlanMapping (with paths and values)
     query_texts: List[str]  # Echo from PlanMapping
     candidates: List[Candidate]  # Top-k from RAG (could be empty)
 

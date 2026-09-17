@@ -110,7 +110,7 @@ class RAGClient:
             "ontologies": [
                 {
                     "ontology": mapping.ontology,
-                    "fields": mapping.fields,
+                    "src_fields": [sf.model_dump() for sf in mapping.src_fields],
                     "query_texts": mapping.query_texts
                 }
                 for mapping in plan.mappings
@@ -180,7 +180,7 @@ class RAGClient:
         
         Args:
             rag_response: Raw response from RAG CLI
-            plan: Original plan (for validation)
+            plan: Original plan (for validation and src_fields)
             
         Returns:
             RAGOutput with parsed buckets and candidates
@@ -188,11 +188,16 @@ class RAGClient:
         record_id = rag_response.get('record_id', plan.record_id)
         buckets_data = rag_response.get('buckets', [])
         
+        # Create mapping lookup for src_fields from plan
+        plan_mapping_by_ontology = {m.ontology: m for m in plan.mappings}
+        
         buckets = []
         flags = []
         
         for bucket_data in buckets_data:
             try:
+                ontology = bucket_data['ontology']
+                
                 # Parse candidates
                 candidates = [
                     Candidate(**candidate_data)
@@ -201,12 +206,24 @@ class RAGClient:
                 
                 # Check for empty candidates
                 if not candidates:
-                    ontology = bucket_data.get('ontology', 'UNKNOWN')
                     flags.append(f"empty_rag_{ontology}")
                 
+                # Get src_fields from plan mapping (RAG response should echo them, but fallback to plan)
+                src_fields_data = bucket_data.get('src_fields', [])
+                from .models import SourceField
+                
+                if src_fields_data:
+                    # Use src_fields from RAG response
+                    src_fields = [SourceField(**sf) if isinstance(sf, dict) else sf for sf in src_fields_data]
+                elif ontology in plan_mapping_by_ontology:
+                    # Fallback: use src_fields from plan
+                    src_fields = plan_mapping_by_ontology[ontology].src_fields
+                else:
+                    src_fields = []
+                
                 bucket = RAGBucket(
-                    ontology=bucket_data['ontology'],
-                    fields=bucket_data.get('fields', []),
+                    ontology=ontology,
+                    src_fields=src_fields,
                     query_texts=bucket_data.get('query_texts', []),
                     candidates=candidates
                 )

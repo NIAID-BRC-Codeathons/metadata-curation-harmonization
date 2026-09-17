@@ -15,7 +15,7 @@ from pathlib import Path
 import logging
 import json
 
-from .models import RecordInput, PlanOutput, PlanMapping
+from .models import RecordInput, PlanOutput, PlanMapping, SourceField
 from .utils import get_argo_llm, format_metadata_for_prompt
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,16 @@ class PlanAgent:
                 result = json.loads(result)
             
             # Convert mappings to PlanMapping objects
-            mappings = [PlanMapping(**m) for m in result.get('mappings', [])]
+            # The LLM should provide src_fields with path, name, value
+            mappings = []
+            for m in result.get('mappings', []):
+                # Convert src_fields dicts to SourceField objects
+                src_fields = [SourceField(**sf) for sf in m.get('src_fields', [])]
+                mappings.append(PlanMapping(
+                    ontology=m['ontology'],
+                    src_fields=src_fields,
+                    query_texts=m.get('query_texts', [])
+                ))
             
             plan_output = PlanOutput(
                 record_id=record.record_id,
@@ -146,7 +155,11 @@ class PlanAgent:
             else:
                 mappings.append(PlanMapping(
                     ontology="UBERON",
-                    fields=["isolation_source"],
+                    src_fields=[SourceField(
+                        path="bvbrc.isolation_source",
+                        name="isolation_source",
+                        value=record.isolation_source
+                    )],
                     query_texts=[record.isolation_source]
                 ))
         
@@ -156,7 +169,11 @@ class PlanAgent:
             if any(term in note_lower for term in ['infection', 'disease', 'patient', 'clinical', 'sepsis']):
                 mappings.append(PlanMapping(
                     ontology="MONDO",
-                    fields=["note"],
+                    src_fields=[SourceField(
+                        path="biosample.attributes.note",
+                        name="note",
+                        value=record.note
+                    )],
                     query_texts=[record.note]
                 ))
         
