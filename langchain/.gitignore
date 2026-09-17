@@ -1,38 +1,4 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-dist/
-*.egg-info/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Environment
+condaenv/
+data/out
+# credentials files
 .env
-*.log
-
-# Data outputs (keep structure, not contents)
-data/raw/*.jsonl
-data/intermediate/*.jsonl
-data/out/*.jsonl
-!data/raw/.gitkeep
-!data/intermediate/.gitkeep
-!data/out/.gitkeep
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# OS
-.DS_Store
-Thumbs.db
