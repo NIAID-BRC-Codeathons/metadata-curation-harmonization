@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Pipeline orchestrator: runs each engine stage to completion, in its own conda
 environment, passing work between stages as files on disk.

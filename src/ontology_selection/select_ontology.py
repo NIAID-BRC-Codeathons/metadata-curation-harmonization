@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Plan stage: decide which ontologies to search for each record, and with what
 query texts.

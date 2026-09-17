@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Reads the retrieval stage's output into the RAGOutput contract that Resolve consumes.
 

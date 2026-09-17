@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Generates reproducible embedding-ready text descriptions for ontology terms.
 

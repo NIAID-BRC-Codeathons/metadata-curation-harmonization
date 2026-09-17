@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Builds ontology_rag vector database parquet files from document-level term embeddings.
 

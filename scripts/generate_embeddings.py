@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 This script generate embedding from unique words in the corpus.
 

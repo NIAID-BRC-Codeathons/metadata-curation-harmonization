@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Runs pipeline stages to completion, one after another, each in its own conda
 environment via `conda run`.

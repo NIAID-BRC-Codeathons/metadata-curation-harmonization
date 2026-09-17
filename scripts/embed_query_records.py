@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Generate embeddings for every ontology-linking query_text in a Plan-output
 JSONL file (see ontology_rag.records.load_records for the input format).

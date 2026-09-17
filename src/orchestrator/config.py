@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Pipeline configuration: the stage list, the shared settings every stage draws on,
 and the named artifacts passed between stages.

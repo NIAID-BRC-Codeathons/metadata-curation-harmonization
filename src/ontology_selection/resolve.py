@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Resolve stage: pick the final ontology term set from the retrieved candidates.
 

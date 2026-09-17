@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Initialize a FAISS vector database and execute queries to retrieve the top k similar candidate
 vectors for a particular set of query vectors.

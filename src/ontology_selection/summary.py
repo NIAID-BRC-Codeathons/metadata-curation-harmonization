@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Run summaries printed at the end of a pipeline stage.
 
