@@ -7,13 +7,18 @@ GOLD_JSON  := curated_metadata_expanded.json
 
 .PHONY: all clean
 
-all: curated_combined.jsonl \
+all: curated_assembly_accessions.tsv \
+     curated_combined.jsonl \
      curated_combined.head10.jsonl \
      curated_combined.unique_isolation_host.jsonl
 
 # alt target: download all remote datasets
 #
 download: combined.jsonl.gz
+
+# Extract assembly accessions from curated JSON
+curated_assembly_accessions.tsv: $(GOLD_JSON)
+	jq -r '["index", "assembly_accession"], (.["Assembly Accessions"] | to_entries[] | [.key, .value]) | @tsv' $< > $@
 
 # 1. Download combined.jsonl.gz from NCBI FTP
 combined.jsonl.gz:
@@ -36,6 +41,6 @@ curated_combined.unique_isolation_host.jsonl: curated_combined.jsonl $(SELECT)
 	python3 $(SELECT) -i $< -o $@ -f isolation_source host
 
 clean:
-	rm -f combined.jsonl.gz combined.jsonl curated_combined.jsonl \
-	      curated_combined.head10.jsonl \
+	rm -f combined.jsonl.gz combined.jsonl curated_assembly_accessions.tsv \
+	      curated_combined.jsonl curated_combined.head10.jsonl \
 	      curated_combined.unique_isolation_host.jsonl
