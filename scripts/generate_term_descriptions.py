@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from ontology_rag.ontology import OboEntry, Ontology  # noqa: E402
 
-ONTOLOGY_DIR = Path(__file__).parent.parent / "data" / "ontology"
+ONTOLOGY_DIR = Path(__file__).parent.parent / "dataset" / "ontology"
 DEFAULT_OUTFILE = ONTOLOGY_DIR / "term_descriptions.parquet"
 
 # OBO files import terms from other ontologies, so each file's own terms must be
