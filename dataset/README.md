@@ -45,6 +45,7 @@ datasets. Targets:
 
 | File | Records | Description |
 |------|---------|-------------|
+| `curated_assembly_accessions.tsv` | 3,078 | Assembly accessions extracted from `curated_metadata_expanded.json` via `jq` |
 | `combined.jsonl.gz` | 158,339 | Downloaded from NCBI FTP |
 | `combined.jsonl` | 158,339 | Uncompressed copy |
 | `curated_combined.jsonl` | ~5,211 | Filtered to assembly accessions present in `curated_metadata_expanded.json` |
