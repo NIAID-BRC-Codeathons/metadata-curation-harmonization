@@ -1,0 +1,81 @@
+# Pipeline-wide configuration for the plan -> embed -> retrieve -> resolve engine.
+#
+# Each stage runs to completion, as its own process, in its own conda environment,
+# handing work to the next stage as a file. Stages are run by the orchestrator:
+#
+#     python -m orchestrator --dry-run
+#     python -m orchestrator
+#     python -m orchestrator --only retrieve
+
+workdir: .   # relative to this file
+
+defaults:
+  timeout: 3600
+
+# Files passed between stages. Stage commands reference these by name.
+artifacts:
+  records:     data/raw/records.jsonl
+  plans:       data/intermediate/plan_outputs.jsonl
+  embeddings:  data/intermediate/query_embeddings.parquet
+  rag_results: data/intermediate/rag_results.jsonl
+  proposals:   data/out/proposals.jsonl
+
+# Shared knobs. Stage commands reference these by name too.
+settings:
+  top_k: 10
+  metric: cosine
+  device: cpu
+  low_score_threshold: 0.70
+  embedding_model: sapbert
+  vector_db_dir: dataset/ontology/vector_db
+  selection_config: src/ontology_selection/config.yaml
+  workers: 4
+  record_limit: 0        # 0 = every record; override with --set record_limit=100
+
+stages:
+  # A. Plan - decide which ontologies to search and with what query texts.
+  - name: plan
+    env: ontology-selection
+    command: >
+      python -m ontology_selection.select_ontology
+      --input {records} --output {plans}
+      --config {selection_config} --workers {workers} --limit {record_limit}
+    inputs:  [records]
+    outputs: [plans]
+
+  # Embed every query text. Needs torch, so it cannot share a process with faiss.
+  - name: embed
+    env: embeddings
+    command: >
+      python scripts/embed_query_records.py
+      -i {plans} -m {embedding_model} -o {embeddings}
+    inputs:  [plans]
+    outputs: [embeddings]
+
+  # B. Retrieve - batched FAISS search, one index load per ontology for the run.
+  - name: retrieve
+    env: metadata-curation
+    command: >
+      python -m ontology_rag.rag
+      -i {plans} -e {embeddings} -v {vector_db_dir} -k {top_k}
+      --metric {metric} --device {device}
+      --low-score-threshold {low_score_threshold} -o {rag_results}
+    inputs:  [plans, embeddings]
+    outputs: [rag_results]
+
+  # C. Resolve - pick the final term set from the retrieved candidates.
+  - name: resolve
+    env: ontology-selection
+    command: >
+      python -m ontology_selection.resolve
+      --rag-results {rag_results} --records {records} --output {proposals}
+      --config {selection_config} --top-k {top_k} --workers {workers}
+    inputs:  [rag_results, records]
+    outputs: [proposals]
+
+# Variables the stages need from the environment; a warning is logged if unset.
+env_passthrough: [ARGO_USER]
+
+logging:
+  level: INFO
+  file: data/out/pipeline.log

@@ -2,7 +2,7 @@
 #
 #   mamba env create -f environment.yaml      # or: conda env create -f environment.yaml
 #   conda activate ontology-selection
-#   python scripts/02_run_pipeline.py --test
+#   PYTHONPATH=$PWD/src python -m ontology_selection.select_ontology --help
 #
 # This is hand-written, not `conda env export` — no build strings and no `prefix:`,
 # so it resolves on Linux, macOS and WSL alike. Anything conda-forge packages well

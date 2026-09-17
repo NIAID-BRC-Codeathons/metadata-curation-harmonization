@@ -32,7 +32,9 @@ System prompt for the Resolve Agent.
 1. Edit the `.md` file directly (no code changes needed)
 2. Test the changes:
    ```bash
-   python3 scripts/02_run_pipeline.py --test
+   PYTHONPATH=$PWD/src python -m ontology_selection.select_ontology \
+       -i data/raw/records.jsonl -o /tmp/plans.jsonl \
+       -c src/ontology_selection/config.yaml --limit 5
    ```
 3. Commit the updated prompt:
    ```bash

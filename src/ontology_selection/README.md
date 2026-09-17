@@ -1,488 +1,138 @@
-# AI-Driven Metadata Curation - LangChain Implementation
+# ontology_selection
 
-LangChain-based implementation of the Plan → Retrieve → Resolve pipeline for mapping biological sample metadata to ontology terms (UBERON, MONDO, ENVO).
+The LLM stages of the engine: **Plan** (step A) decides which ontologies to search and
+with what query texts; **Resolve** (step C) picks the final term set from the retrieved
+candidates. Retrieval itself (step B) is `src/ontology_rag`.
 
-## Quick Start
+Both stages are batch CLIs over JSONL. They are normally driven by the orchestrator
+(`python scripts/run_pipeline.py`), which runs them in order with the retrieval stages in
+between - see `pipeline.yaml` and `src/orchestrator/README.md`. The contracts are
+defined in `../engine.md`.
 
-### 1. Install Dependencies
+## Setup
 
 ```bash
-# From the src/ontology_selection/ directory
-mamba env create -f environment.yaml   # or: conda env create -f environment.yaml
+conda env create -f environment.yaml
 conda activate ontology-selection
+
+cp .env.example .env     # then set ARGO_USER=ac.yourname
 ```
 
-### 2. Configure Environment
+`ARGO_USER` is read from `.env` beside this package, or from the shell, which wins.
+It never lives in `config.yaml`.
+
+## Running a stage directly
+
+Both need `src/` on the path; the orchestrator sets this for you.
 
 ```bash
-# Copy example env file
-cp .env.example .env
+export PYTHONPATH=$PWD/src
 
-# Edit .env and set your ARGO_USER
-nano .env
-```
+# A. Plan
+python -m ontology_selection.select_ontology \
+    --input data/raw/records.jsonl \
+    --output data/intermediate/plan_outputs.jsonl \
+    --config src/ontology_selection/config.yaml \
+    --workers 4 [--limit N]
 
-Example `.env`:
-```bash
-ARGO_USER=ac.yourname
-```
-
-The pipeline reads `.env` from `src/ontology_selection/` (beside `config.yaml`), so keep it
-there regardless of where you invoke the script from. An `ARGO_USER` already exported in your
-shell takes precedence over the file.
-
-### 3. Test with Mock Data
-
-```bash
-# Run on 5 handcrafted test records with mock RAG
-python scripts/02_run_pipeline.py --test
-```
-
-This will process test records and save results to `data/out/proposals.jsonl`.
-
-### 4. Run on Real Data
-
-```bash
-# Process BV-BRC records (first 100)
-python scripts/02_run_pipeline.py \
-    --input ../../data/inputs/sample.input.jsonl \
+# C. Resolve
+python -m ontology_selection.resolve \
+    --rag-results data/intermediate/rag_results.jsonl \
+    --records data/raw/records.jsonl \
     --output data/out/proposals.jsonl \
-    --limit 100
+    --config src/ontology_selection/config.yaml \
+    --top-k 10 --workers 4
 ```
 
-## Architecture
+Both preserve input order, so every intermediate file lines up row for row with
+`records.jsonl`.
 
+## Input
+
+`ingest_jsonl` accepts two shapes and detects which per line:
+
+- **Flat engine rows** (`engine.md` section 6.1) - a top-level `record_id` plus the
+  searchable fields. Fields the Plan agent can use are lifted out of
+  `extras.attributes` when the top level leaves them unset.
+- **Nested BV-BRC/NCBI records** - flattened by `normalize_bvbrc_record`.
+
+## The Plan → Retrieve boundary
+
+`PlanOutput` serialized to JSONL *is* the retrieval stage's input format. No adapter
+sits between them: `scripts/embed_query_records.py` and `ontology_rag.rag` both read
+`plan_outputs.jsonl` directly.
+
+```json
+{"record_id": "SAMN50884510",
+ "mappings": [{"ontology": "UBERON",
+               "src_fields": [{"path": "bvbrc.isolation_source",
+                               "name": "isolation_source", "value": "Groin"}],
+               "query_texts": ["groin", "inguinal region"]}],
+ "flags": []}
 ```
-RecordInput (BV-BRC JSON)
-    ↓
-┌────────────────────┐
-│   PLAN AGENT       │  LLM decides: which ontologies? what queries?
-│   (claudesonnet5)  │
-└────────┬───────────┘
-         │ PlanOutput {mappings: [{ontology, fields, query_texts}]}
-         ↓
-┌────────────────────┐
-│   RAG CLIENT       │  Calls external rag.py (or mock)
-│   (subprocess)     │  Embeds queries, searches ontology DBs
-└────────┬───────────┘
-         │ RAGOutput {buckets: [{ontology, candidates[]}]}
-         ↓
-┌────────────────────┐
-│  RESOLVE AGENT     │  LLM picks best terms, assigns roles/confidence
-│  (claudesonnet5)   │
-└────────┬───────────┘
-         │
-         ↓
-ResolveOutput {terms: [{curie, label, role, confidence}]}
-```
+
+## The Retrieve → Resolve boundary
+
+Here an adapter *is* needed, and it is `rag_results.py`. Retrieval reports top k
+matches **per query text**; Resolve reasons over one ranked candidate list **per
+ontology**. `load_rag_results()` flattens the former into the latter: matches from
+every query text in a bucket are merged, a term reached by several queries keeps its
+best score, and what survives is re-sorted and re-ranked to `top_k`.
+
+`definition` is left `null`. The vector database carries term ids and names only, and
+`engine.md` is explicit that a missing definition is reported, never invented. The
+`missing_definition` soft check is disabled for the same reason - with definitions
+uniformly absent it would fire on every record and collapse `outcome` to a constant.
+Restore it when the vector database is rebuilt with definitions.
 
 ## Configuration
 
-Edit `config.yaml` to customize:
+`config.yaml` holds what belongs to these two stages: the `llm` block (Argo model,
+temperature, base URL), `field_selection`, `parallelism` and `logging`.
 
-- **LLM settings** (model, temperature, max_tokens)
-- **RAG command** (path to rag.py, parameters)
-- **Field selection** (stop list, consider list)
-- **Parallelization** (max_workers)
-- **Logging** (level, file path)
+Stage commands, artifact paths and the retrieval settings live one level up in
+`pipeline.yaml`, because the orchestrator owns them.
 
-Key settings:
+## Module layout
 
-```yaml
-llm:
-  model: claudesonnet5
-  temperature: 1
-
-rag:
-  command: "python scripts/00_mock_rag.py"  # Change to real rag.py path
-  top_k: 10
-  low_score_threshold: 0.70
-
-parallelism:
-  max_workers: 1  # Increase for parallel processing
-```
-
-## Pipeline Stages
-
-### Stage 1: Plan Agent
-
-**Input:** `RecordInput` (normalized BV-BRC metadata)  
-**Output:** `PlanOutput` (ontology mappings + query texts)
-
-The Plan agent analyzes metadata fields and decides:
-- Which ontologies are relevant (UBERON, MONDO, ENVO)
-- Which input fields map to each ontology
-- What search queries to generate (1-3 per ontology)
-
-Example:
-```json
-{
-  "record_id": "SAMN123",
-  "mappings": [
-    {
-      "ontology": "UBERON",
-      "fields": ["isolation_source"],
-      "query_texts": ["blood"]
-    },
-    {
-      "ontology": "MONDO",
-      "fields": ["note"],
-      "query_texts": ["sepsis", "bloodstream infection"]
-    }
-  ],
-  "flags": []
-}
-```
-
-### Stage 2: RAG Retrieval
-
-**Input:** `PlanOutput`  
-**Output:** `RAGOutput` (candidate terms)
-
-Calls external RAG system (or mock) to:
-- Embed query texts
-- Search pre-indexed ontology databases
-- Return top-k candidates per ontology
-
-Example:
-```json
-{
-  "record_id": "SAMN123",
-  "buckets": [
-    {
-      "ontology": "UBERON",
-      "candidates": [
-        {
-          "curie": "UBERON:0000178",
-          "label": "blood",
-          "definition": "A fluid connective tissue...",
-          "score": 0.95,
-          "rank": 0
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Stage 3: Resolve Agent
-
-**Input:** `RAGOutput` + original metadata  
-**Output:** `ResolveOutput` (final selected terms)
-
-The Resolve agent:
-- Picks best terms from RAG candidates
-- Assigns roles (primary/secondary/alternate)
-- Assigns confidence scores
-- Can select multiple terms across ontologies
-- Can abstain if no good matches
-
-Example:
-```json
-{
-  "record_id": "SAMN123",
-  "outcome": "proposed",
-  "terms": [
-    {
-      "ontology": "UBERON",
-      "term_id": "UBERON:0000178",
-      "label": "blood",
-      "role": "primary",
-      "confidence": 0.95
-    },
-    {
-      "ontology": "MONDO",
-      "term_id": "MONDO:0005015",
-      "label": "sepsis",
-      "role": "primary",
-      "confidence": 0.88
-    }
-  ],
-  "flags": []
-}
-```
-
-## Project Structure
-
-All paths below are relative to the repository root.
-
-```
-src/ontology_selection/          # The package — and the working directory for all commands
-├── config.yaml              # Main configuration
-├── .env                     # Credentials (gitignored)
-├── environment.yaml         # Conda environment definition
-│
-├── models.py                # Pydantic schemas
-├── plan_agent.py            # Plan agent (LLM)
-├── rag_client.py            # RAG wrapper
-├── resolve_agent.py         # Resolve agent (LLM)
-├── checks.py                # Soft validation
-├── pipeline.py              # Orchestration
-├── ingest.py                # BV-BRC JSON normalization
-├── utils.py                 # Helpers
-│
-├── prompts/                 # System prompts for the Plan and Resolve agents
-│
-├── scripts/
-│   ├── 00_mock_rag.py       # Mock RAG for testing
-│   └── 02_run_pipeline.py   # Main entry point
-│
-├── data/
-│   ├── intermediate/        # Plan/RAG outputs (optional)
-│   ├── out/                 # Final proposals.jsonl, pipeline.log
-│   └── test/
-│
-└── data_examples/           # Checked-in sample outputs for reference
-```
-
-Input data lives outside the package, at the repository root:
-
-```
-data/
-├── inputs/                  # Source datasets (sample.input.jsonl, ...)
-└── raw/                     # Working rows (records.jsonl)
-```
-
-## CLI Usage
-
-### Run Pipeline
-
-```bash
-# Test mode (5 handcrafted records, mock RAG)
-python scripts/02_run_pipeline.py --test
-
-# Real data, first 100 records
-python scripts/02_run_pipeline.py \
-    --input ../../data/raw/records.jsonl \
-    --limit 100
-
-# Full dataset, 4 parallel workers
-python scripts/02_run_pipeline.py \
-    --input ../../data/raw/records.jsonl \
-    --workers 4
-
-# Custom config
-python scripts/02_run_pipeline.py \
-    --input ../../data/raw/records.jsonl \
-    --config my_config.yaml
-
-# Dry run (don't save outputs)
-python scripts/02_run_pipeline.py \
-    --input ../../data/raw/records.jsonl \
-    --no-save
-```
-
-### Options
-
-- `--input FILE`: Input JSONL file (BV-BRC records)
-- `--output FILE`: Output JSONL file (proposals)
-- `--config FILE`: Configuration file (default: config.yaml)
-- `--limit N`: Process first N records only
-- `--workers N`: Override max_workers from config
-- `--test`: Run on test data (ignores --input)
-- `--log-level`: DEBUG, INFO, WARNING, ERROR
-- `--no-save`: Dry run (don't write outputs)
-
-## Testing Mock RAG
-
-The mock RAG system (`scripts/00_mock_rag.py`) simulates the real RAG interface for testing.
-
-```bash
-# Test mock RAG directly
-python scripts/00_mock_rag.py \
-    --input test_input.json \
-    --outfile test_output.json \
-    --top-k 10 \
-    --low-score-threshold 0.70
-```
-
-Input format (`test_input.json`):
-```json
-{
-  "record_id": "TEST001",
-  "ontologies": [
-    {
-      "ontology": "UBERON",
-      "fields": ["isolation_source"],
-      "query_texts": ["blood"]
-    }
-  ]
-}
-```
-
-## Switching to Real RAG
-
-1. Update `config.yaml`:
-
-```yaml
-rag:
-  command: "python /path/to/real_rag.py"
-  top_k: 10
-  # ... other rag settings
-```
-
-2. Ensure real `rag.py` accepts the same CLI arguments:
-
-```bash
-rag.py --input in.json --top-k 10 --model biomedbert \
-       --metric cosine --device gpu --low-score-threshold 0.70 \
-       --outfile out.json
-```
-
-## Output Files
-
-### Intermediate Outputs (for debugging)
-
-When `save_intermediate: true` in `config.yaml` (default), the pipeline saves:
-
-**1. Plan outputs** (`data/intermediate/plan_outputs.jsonl`):
-```json
-{
-  "record_id": "TEST001",
-  "mappings": [
-    {"ontology": "UBERON", "fields": ["isolation_source"], "query_texts": ["blood"]},
-    {"ontology": "MONDO", "fields": ["note"], "query_texts": ["bloodstream infection"]}
-  ],
-  "flags": []
-}
-```
-
-**2. RAG outputs** (`data/intermediate/rag_results.jsonl`):
-```json
-{
-  "record_id": "TEST001",
-  "buckets": [
-    {
-      "ontology": "UBERON",
-      "fields": ["isolation_source"],
-      "query_texts": ["blood"],
-      "candidates": [
-        {"curie": "UBERON:0000178", "label": "blood", "score": 0.95, "rank": 0}
-      ]
-    }
-  ]
-}
-```
-
-These files show exactly what was passed between pipeline stages, making debugging easier.
-
-### Final Output Format
-
-The pipeline produces `proposals.jsonl` with one JSON object per line:
-
-```json
-{
-  "record_id": "SAMN02603524",
-  "outcome": "proposed",
-  "terms": [
-    {
-      "ontology": "UBERON",
-      "term_id": "UBERON:0000178",
-      "label": "blood",
-      "role": "primary",
-      "confidence": 0.95
-    }
-  ],
-  "candidate_curies": ["UBERON:0000178", "UBERON:0001977", ...],
-  "flags": [],
-  "abstain_reason": null,
-  "original_metadata": { ... }
-}
-```
+| File | Job |
+|---|---|
+| `models.py` | The pydantic contracts from `engine.md` section 6 |
+| `ingest.py` | Raw JSONL -> `RecordInput`, either input shape |
+| `plan_agent.py` | Step A: the LLM call and its rules-based fallback |
+| `select_ontology.py` | Step A CLI |
+| `rag_results.py` | Retrieval output -> `RAGOutput` (the adapter) |
+| `resolve_agent.py` | Step C: the LLM call, the invented-CURIE guard, the fallback |
+| `resolve.py` | Step C CLI |
+| `checks.py` | Soft checkers - flags, never exceptions |
+| `summary.py` | End-of-stage run summaries |
+| `utils.py` | Argo client, config, logging, JSONL I/O |
+| `prompts/` | The system prompts, as markdown |
 
 ## Flags
 
-The pipeline adds flags to track edge cases:
+Flags accumulate and travel to review rather than stopping the run. Plan flags reach
+the final output through retrieval, which copies them onto its own result.
 
-**Plan stage:**
-- `looks_like_host`: isolation_source appears to be a species name
-- `empty_record`: All key fields are null/empty
-- `no_mappings`: Plan agent produced no ontology mappings
-- `long_query_text`: Query text exceeds 200 characters
-- `plan_agent_error`: LLM failed, using fallback
-
-**RAG stage:**
-- `empty_rag_UBERON`: No candidates returned for UBERON
-- `low_scores_MONDO`: All candidates have score < 0.5
-- `missing_definition`: Some candidates lack definitions
-
-**Resolve stage:**
-- `invented_curie_removed`: LLM tried to invent a CURIE
-- `low_confidence_primary`: Primary term has confidence < 0.5
-- `multiple_primary_same_ontology`: Multiple primary terms for one ontology
-- `resolve_agent_error`: LLM failed, using fallback
+| Flag | Meaning |
+|---|---|
+| `no_mappings` | Plan found nothing worth searching |
+| `empty_record` | No usable fields on the record |
+| `ambiguous_source` | Source text too vague to map confidently |
+| `looks_like_host` | Host-like text in `isolation_source` (`engine.md` section 8) |
+| `<ONTOLOGY>: top match score ... below threshold` | Weak retrieval, from `ontology_rag` |
+| `empty_rag_<ONTOLOGY>` | A bucket came back with no candidates |
+| `invented_curie_removed` | Resolve named a CURIE that was not retrieved; dropped |
+| `plan_agent_error` / `resolve_agent_error` | LLM call failed; heuristic fallback used |
 
 ## Troubleshooting
 
-### ARGO_USER not set
+**`ModuleNotFoundError: No module named 'ontology_selection'`** - set
+`PYTHONPATH=$PWD/src`, or run through the orchestrator, which sets it.
 
-```
-RuntimeError: ARGO_USER is not set. Copy .env.example to .../src/ontology_selection/.env
-and set ARGO_USER to your Argo username, e.g. ARGO_USER=ac.yourname
-```
+**`RuntimeError: ARGO_USER is not set`** - copy `.env.example` to `.env` and set it.
 
-**Fix:** Create `.env` in `src/ontology_selection/` (see step 2 above):
-```bash
-cp .env.example .env
-nano .env    # set ARGO_USER=ac.yourname
-```
-
-Or export it in your shell, which overrides the file:
-```bash
-export ARGO_USER=ac.yourname
-```
-
-### Config file not found
-
-```
-ERROR: Config file not found: config.yaml
-```
-
-**Fix:** Run script from the `src/ontology_selection/` directory:
-```bash
-cd src/ontology_selection/
-python scripts/02_run_pipeline.py --test
-```
-
-### Mock RAG not found
-
-```
-FileNotFoundError: [Errno 2] No such file or directory: 'python'
-```
-
-**Fix:** Update RAG command in config.yaml to use full path:
-```yaml
-rag:
-  command: "python3 scripts/00_mock_rag.py"
-```
-
-### LLM returns invalid JSON
-
-The pipeline includes fallback logic for LLM failures. Check logs for:
-```
-Plan agent failed for SAMN123: JSON decode error
-```
-
-This triggers heuristic-based fallback. If frequent, try:
-- Adjusting prompts in `plan_agent.py` or `resolve_agent.py`
-- Increasing `max_tokens` in config.yaml
-- Using a different model (e.g., `claudeopus5`)
-
-## Next Steps
-
-### Day 2 (Tomorrow)
-- [ ] Integrate real RAG system (replace mock)
-- [ ] Build Web UI for human review (Streamlit)
-- [ ] Test on 100+ real BV-BRC records
-
-### Day 3
-- [ ] Process full 6k dataset
-- [ ] Evaluation framework (vs gold standard)
-- [ ] Error analysis and prompt tuning
-- [ ] Documentation and demo
-
-## References
-
-- [engine.md](../engine.md): Pipeline specification
-- [Argo Quickstart](../../../ANL-Argo-Quickstart/README.md): LLM access documentation
-- [BV-BRC](https://www.bv-brc.org/): Bacterial/viral resource center
+**`Invalid json output: ... ACCESS DENIED ... FROM ARGO`** - the gateway returned an
+error body with HTTP 200. Seen transiently at roughly 1 call in 400; the agent falls
+back to its heuristic and flags the record. If it is every call, the account is not
+authorized for the Argo API.

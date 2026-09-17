@@ -1,6 +1,12 @@
 """
 Data ingestion: Convert raw BV-BRC/NCBI JSON to normalized RecordInput format.
 
+Two input shapes are accepted, detected per line:
+
+- Nested BV-BRC/NCBI records, flattened by normalize_bvbrc_record.
+- Flat engine rows (engine.md section 6.1), already carrying record_id and the
+  searchable fields, handled by normalize_engine_row.
+
 Handles the complex nested structure and applies field selection rules.
 """
 
@@ -92,6 +98,66 @@ def normalize_bvbrc_record(raw_data: Dict[str, Any], config: Dict[str, Any]) -> 
     return record
 
 
+def normalize_engine_row(raw_data: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
+    """
+    Convert a flat engine row (engine.md section 6.1) to RecordInput.
+
+    These rows are already normalized - record_id and the searchable fields sit at
+    the top level - but the richer metadata stays in extras.attributes. Fields the
+    Plan agent can use are lifted out of there when the top level leaves them unset.
+
+    Args:
+        raw_data: Flat engine row
+        config: Configuration dictionary
+
+    Returns:
+        RecordInput object
+    """
+    extras = raw_data.get('extras') or {}
+    attrs = extras.get('attributes') or {}
+
+    def pick(*keys):
+        """First non-empty attribute value among keys."""
+        for key in keys:
+            value = attrs.get(key)
+            if value:
+                return value
+        return None
+
+    return RecordInput(
+        record_id=raw_data['record_id'],
+        isolation_source=raw_data.get('isolation_source') or pick('isolation_source'),
+        body_sample_site=raw_data.get('body_sample_site') or pick('body_sample_site'),
+        host=raw_data.get('host') or pick('host'),
+        note=raw_data.get('note') or pick('note'),
+        disease=raw_data.get('disease') or pick('host_disease', 'disease'),
+        tissue=raw_data.get('tissue') or pick('tissue'),
+        environment=raw_data.get('environment') or pick('env_medium', 'environment'),
+        strain=raw_data.get('strain') or pick('strain'),
+        geo_loc_name=raw_data.get('geo_loc_name') or pick('geo_loc_name'),
+        collection_date=raw_data.get('collection_date') or pick('collection_date'),
+        biosample_description=extras.get('title'),
+        comments=list(raw_data.get('comments') or []),
+        extras=extras,
+    )
+
+
+def normalize_record(raw_data: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
+    """
+    Normalize one input record, dispatching on its shape.
+
+    Args:
+        raw_data: Raw record, either a flat engine row or a nested BV-BRC record
+        config: Configuration dictionary
+
+    Returns:
+        RecordInput object
+    """
+    if 'record_id' in raw_data:
+        return normalize_engine_row(raw_data, config)
+    return normalize_bvbrc_record(raw_data, config)
+
+
 def ingest_jsonl(
     filepath: str,
     config: Dict[str, Any],
@@ -121,7 +187,7 @@ def ingest_jsonl(
             
             try:
                 raw_data = json.loads(line)
-                record = normalize_bvbrc_record(raw_data, config)
+                record = normalize_record(raw_data, config)
                 records.append(record)
                 
             except Exception as e:
