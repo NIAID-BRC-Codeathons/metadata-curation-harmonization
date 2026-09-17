@@ -17,7 +17,7 @@ The assembly, biosample and bioproject accessions were extracted from the metada
 
 ## build subset of full dataset for just the curated records
 
-Extract asembly IDs from curated dataset:
+Extract assembly IDs from curated dataset:
 ```
  jq -r '["index", "assembly_accession"],
          (.["Assembly Accessions"] | to_entries[] | [.key, .value])
@@ -37,3 +37,27 @@ All of NCBI Genome, with bv-brc and SRA and BioProject/Sample records included, 
 ```
 ./pull_combined_from_ftp.sh
 ```
+
+## Makefile — derived datasets
+
+Run `make` in this directory to download, decompress, and build all derived
+datasets. Targets:
+
+| File | Records | Description |
+|------|---------|-------------|
+| `combined.jsonl.gz` | 158,339 | Downloaded from NCBI FTP |
+| `combined.jsonl` | 158,339 | Uncompressed copy |
+| `curated_combined.jsonl` | ~5,211 | Filtered to assembly accessions present in `curated_metadata_expanded.json` |
+| `curated_combined.head10.jsonl` | 10 | First 10 records from the curated subset (quick smoke tests) |
+| `curated_combined.unique_isolation_host.jsonl` | ~309 | One record per unique `(isolation_source, host)` pair; ties broken by alphabetically-first assembly accession |
+
+Scripts used by the Makefile live in `../scripts/`:
+
+- **`filter_jsonl_by_assembly_accession.py`** — filters JSONL to records
+  matching a list of assembly accessions. Accepts either the JSON gold-standard
+  file (`curated_metadata_expanded.json`) or a TSV. Matches on both
+  `genome.accession` (GCF\_) and `genome.pairedAccession` (GCA\_).
+- **`select_unique_field_records.py`** — selects one record per unique
+  combination of named metadata fields. Supports: `isolation_source`, `host`,
+  `disease`, `body_sample_site`, `geo_loc_name`, `strain`, `tissue`,
+  `environment`, `note`, `collection_date`.
