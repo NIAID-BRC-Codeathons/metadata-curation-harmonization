@@ -20,10 +20,10 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from ontology_rag.embeddings import (  # noqa: E402
-    SUPPORTED_LLMS,
+from ontology_rag.embeddings import SUPPORTED_LLMS
+from ontology_rag.embeddings import (
     EmbeddingGenerator as BaseEmbeddingGenerator,
-)
+)  # noqa: E402
 
 
 class EmbeddingGenerator(BaseEmbeddingGenerator):
