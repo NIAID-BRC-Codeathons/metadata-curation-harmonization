@@ -35,16 +35,16 @@ def get_argo_llm(config: dict) -> ChatOpenAI:
     
     # For Anthropic models on Argo, max_tokens must be set and <= 21000 for non-streaming
     # See ANL-Argo-Quickstart README.md section 6
+    max_tokens_val = min(config['llm'].get('max_tokens', 4096), 21000)
+    
+    # Try passing max_tokens via model_kwargs (workaround for LangChain parameter handling)
     llm_config = {
         "model": config['llm']['model'],
         "api_key": argo_user,
         "base_url": config['llm']['base_url'],
         "temperature": config['llm']['temperature'],
+        "model_kwargs": {"max_tokens": max_tokens_val}
     }
-    
-    # Add max_tokens if specified (required for Claude models)
-    if 'max_tokens' in config['llm']:
-        llm_config['max_tokens'] = min(config['llm']['max_tokens'], 21000)
     
     return ChatOpenAI(**llm_config)
 

@@ -3,8 +3,8 @@
 # LLM Configuration (Argo)
 llm:
   provider: argo
-  model: claudesonnet5
-  temperature: 1  # Required for claudesonnet5 compatibility
+  model: gpt56terra  # GPT model (Claude models have max_tokens issue with LangChain)
+  temperature: 1
   max_tokens: 4096
   base_url: https://apps.inside.anl.gov/argoapi/v1
 
@@ -12,7 +12,7 @@ llm:
 rag:
   # Command to invoke RAG retrieval system
   # Example: python /path/to/rag.py
-  command: "python scripts/00_mock_rag.py"
+  command: "python3 scripts/00_mock_rag.py"
   
   # RAG parameters
   top_k: 10
