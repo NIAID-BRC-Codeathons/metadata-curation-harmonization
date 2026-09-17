@@ -1,0 +1,46 @@
+# Conda environment for the LangChain Plan -> Retrieve -> Resolve pipeline.
+#
+#   mamba env create -f environment.yaml      # or: conda env create -f environment.yaml
+#   conda activate metadata-curation-langchain
+#   python scripts/02_run_pipeline.py --test
+#
+# This is hand-written, not `conda env export` — no build strings and no `prefix:`,
+# so it resolves on Linux, macOS and WSL alike. Anything conda-forge packages well
+# is a conda dependency; the LangChain stack is pip, because conda-forge lags it by
+# enough that pinning both ways would fight.
+#
+# Kept deliberately separate from the engine environment (`metadata-curation`):
+# that one is stdlib-only by design and pulling LangChain into it would undo that.
+name: ontology-selection
+
+channels:
+  - conda-forge
+
+dependencies:
+  # 3.12 matches the sibling engine environment. Not 3.13+: the LangChain stack and
+  # Streamlit are still catching up, and a codeathon is the wrong place to find out.
+  - python=3.12
+  - pip
+
+  # Runtime
+  - pydantic>=2.5
+  - pyyaml>=6.0
+  - tqdm>=4.66
+  - httpx>=0.26
+  - python-dotenv>=1.0
+
+  # Web UI and tabular output
+  - streamlit>=1.31
+  - pandas>=2.2
+
+  # Development
+  - pytest>=8.0
+  - ipykernel>=6.29
+  - jupyter>=1.0
+
+  - pip:
+      # The Argo gateway is OpenAI-compatible, so the OpenAI adapter is the client
+      # even though the models behind it are GPT and Claude. See config.yaml:llm.
+      - langchain>=0.1.0
+      - langchain-core>=0.1.0
+      - langchain-openai>=0.0.5
