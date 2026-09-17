@@ -83,6 +83,11 @@ def main():
         action="store_true",
         help="Do not emit BV-BRC records unmatched to this genome slice",
     )
+    parser.add_argument(
+        "--include-bioproject-match",
+        action="store_true",
+        help="Use BioProject accession to match BV-BRC records",
+    )
     args = parser.parse_args()
 
     if args.offset < 0:
@@ -202,20 +207,19 @@ def main():
             FROM bvbrc b
         ),
         matches AS (
-            SELECT g.genome_id, b.bvbrc_id, 'assembly_accession' AS matched_by
+                        SELECT g.genome_id, b.bvbrc_id,
+                                     1 AS match_order, 'assembly_accession' AS matched_by
             FROM genome_records g JOIN bvbrc_records b
               ON b.assembly_accession IN
                  (g.accession, g.currentAccession, g.pairedAccession)
             UNION
-            SELECT g.genome_id, b.bvbrc_id, 'biosample_accession'
+                        SELECT g.genome_id, b.bvbrc_id,
+                                     2 AS match_order, 'biosample_accession'
             FROM genome_records g JOIN bvbrc_records b
               ON b.biosample_accession = g.assemblyInfo.biosample.accession
             UNION
-            SELECT g.genome_id, b.bvbrc_id, 'bioproject_accession'
-            FROM genome_records g JOIN bvbrc_records b
-              ON b.bioproject_accession = g.assemblyInfo.bioprojectAccession
-            UNION
-            SELECT g.genome_id, b.bvbrc_id, 'genbank_accession'
+                        SELECT g.genome_id, b.bvbrc_id,
+                                     3 AS match_order, 'genbank_accession'
             FROM genome_records g JOIN bvbrc_records b
               ON g.wgsInfo.masterWgsUrl IS NOT NULL
              AND b.genbank_accessions IS NOT NULL
@@ -227,10 +231,16 @@ def main():
                      1
                  )
              )
+             UNION
+             SELECT g.genome_id, b.bvbrc_id,
+                 4 AS match_order, 'bioproject_accession'
+             FROM genome_records g JOIN bvbrc_records b
+            ON b.bioproject_accession = g.assemblyInfo.bioprojectAccession
+                  AND {str(args.include_bioproject_match).upper()}
         ),
         best_matches AS (
             SELECT genome_id, bvbrc_id,
-                   min(matched_by) AS matched_by
+                 arg_min(matched_by, match_order) AS matched_by
             FROM matches
             GROUP BY genome_id, bvbrc_id
         )
