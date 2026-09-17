@@ -7,8 +7,13 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Any, List
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 import yaml
+
+
+# Credentials live in .env beside this module; see README "Configure Environment".
+ENV_PATH = Path(__file__).parent / ".env"
 
 
 def load_config(config_path: str = "config.yaml") -> dict:
@@ -20,18 +25,25 @@ def load_config(config_path: str = "config.yaml") -> dict:
 def get_argo_llm(config: dict) -> ChatOpenAI:
     """
     Initialize Argo LLM client from config.
-    Reads ARGO_USER from environment.
+    Reads ARGO_USER from .env; an ARGO_USER already set in the shell takes precedence.
     
     Args:
         config: Configuration dictionary
         
     Returns:
         ChatOpenAI instance configured for Argo
+        
+    Raises:
+        RuntimeError: If ARGO_USER is set neither in .env nor in the environment
     """
-    argo_user = os.getenv("ARGO_USER", "ac.alapointe")
+    load_dotenv(ENV_PATH)
+    argo_user = os.getenv("ARGO_USER")
     
-    if argo_user == "ac.yourname":
-        logging.warning("ARGO_USER not set in environment, using default 'ac.yourname'")
+    if not argo_user:
+        raise RuntimeError(
+            f"ARGO_USER is not set. Copy .env.example to {ENV_PATH} and set "
+            "ARGO_USER to your Argo username, e.g. ARGO_USER=ac.yourname"
+        )
     
     # For Anthropic models on Argo, max_tokens must be set and <= 21000 for non-streaming
     # See ANL-Argo-Quickstart README.md section 6

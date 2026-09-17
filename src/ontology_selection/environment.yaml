@@ -1,7 +1,7 @@
 # Conda environment for the LangChain Plan -> Retrieve -> Resolve pipeline.
 #
 #   mamba env create -f environment.yaml      # or: conda env create -f environment.yaml
-#   conda activate metadata-curation-langchain
+#   conda activate ontology-selection
 #   python scripts/02_run_pipeline.py --test
 #
 # This is hand-written, not `conda env export` — no build strings and no `prefix:`,

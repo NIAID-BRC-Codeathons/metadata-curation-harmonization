@@ -171,7 +171,7 @@ cd metadata-curation-harmonization/src/ontology_selection/
 
 # Install dependencies
 mamba env create -f environment.yaml   # or: conda env create -f environment.yaml
-conda activate metadata-curation-langchain
+conda activate ontology-selection
 
 # Set Argo credentials
 cp .env.example .env
@@ -232,10 +232,10 @@ class Config:
 ```
 
 ### 3. ARGO_USER not set
-**Issue:** Defaults to `ac.yourname` if env var missing  
-**Fix:** Export in shell or add to `.env`:
+**Issue:** Raises `RuntimeError` if set neither in `.env` nor in the environment  
+**Fix:** Add it to `src/ontology_selection/.env`, or export in shell to override the file:
 ```bash
-export ARGO_USER=ac.curtish
+export ARGO_USER=ac.yourname
 ```
 
 ---
