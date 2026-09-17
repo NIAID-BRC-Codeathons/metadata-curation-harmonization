@@ -2,6 +2,7 @@
 """MCP server exposing local genome/BV-BRC extracts alongside OmicIDX via DuckDB."""
 
 import json
+import re
 
 import duckdb
 from mcp.server.mcpserver import MCPServer
@@ -11,6 +12,7 @@ from omics_mcp.config import (
     MAX_ROWS,
     OMICIDX_BASE,
     OMICIDX_TABLES,
+    omicidx_source,
     table_source,
 )
 
@@ -36,9 +38,10 @@ def connect():
         )
 
     for name in OMICIDX_TABLES:
+        location, _ = omicidx_source(name)
         con.execute(
             f"CREATE VIEW omicidx_{name} AS SELECT * FROM read_parquet"
-            f"('{OMICIDX_BASE}/{name}.parquet')"
+            f"('{sql_literal(location)}')"
         )
 
     return con
@@ -163,7 +166,12 @@ def get_genome(accession: str, include_sra: bool = True) -> str:
         info = record.get("assemblyInfo") or {}
         biosample_accession = (info.get("biosample") or {}).get("accession")
         bioproject_accession = info.get("bioprojectAccession")
-        wgs_prefix = (record.get("wgsInfo") or {}).get("wgsProjectAccession")
+        master_wgs_url = (record.get("wgsInfo") or {}).get("masterWgsUrl")
+        master_wgs_accession = None
+
+        if master_wgs_url:
+            match = re.search(r"/nuccore/([^.?]+)", master_wgs_url)
+            master_wgs_accession = match.group(1) if match else None
 
         result = {"genome": record, "matched_by": {}}
 
@@ -185,8 +193,13 @@ def get_genome(accession: str, include_sra: bool = True) -> str:
             ),
             (
                 "genbank_accessions",
-                "SELECT * FROM bvbrc WHERE genbank_accessions LIKE ?",
-                [f"{wgs_prefix[:4]}%" if wgs_prefix else None],
+                """
+                SELECT * FROM bvbrc
+                WHERE list_contains(
+                    string_split(genbank_accessions, ','), ?
+                )
+                """,
+                [master_wgs_accession],
             ),
         ]
 
