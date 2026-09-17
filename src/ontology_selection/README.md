@@ -9,7 +9,7 @@ LangChain-based implementation of the Plan → Retrieve → Resolve pipeline for
 ```bash
 # From the src/ontology_selection/ directory
 mamba env create -f environment.yaml   # or: conda env create -f environment.yaml
-conda activate metadata-curation-langchain
+conda activate ontology-selection
 ```
 
 ### 2. Configure Environment
@@ -26,6 +26,10 @@ Example `.env`:
 ```bash
 ARGO_USER=ac.yourname
 ```
+
+The pipeline reads `.env` from `src/ontology_selection/` (beside `config.yaml`), so keep it
+there regardless of where you invoke the script from. An `ARGO_USER` already exported in your
+shell takes precedence over the file.
 
 ### 3. Test with Mock Data
 
@@ -413,10 +417,17 @@ The pipeline adds flags to track edge cases:
 ### ARGO_USER not set
 
 ```
-WARNING: ARGO_USER not set in environment, using default 'ac.yourname'
+RuntimeError: ARGO_USER is not set. Copy .env.example to .../src/ontology_selection/.env
+and set ARGO_USER to your Argo username, e.g. ARGO_USER=ac.yourname
 ```
 
-**Fix:** Set `ARGO_USER` in `.env` or export in shell:
+**Fix:** Create `.env` in `src/ontology_selection/` (see step 2 above):
+```bash
+cp .env.example .env
+nano .env    # set ARGO_USER=ac.yourname
+```
+
+Or export it in your shell, which overrides the file:
 ```bash
 export ARGO_USER=ac.yourname
 ```
