@@ -90,9 +90,28 @@ The house-shaped **Home** link at the top of the sidebar returns to the home rou
 - **Export:** Export JSONL downloads all matching records in the selected sort order, across all pages, retaining every field regardless of visible columns. Record details also offer an individual JSON download.
 - **Saved views:** Bookmark or share the current URL to retain columns, filters, sorting, and page. Dataset IDs are specific to the database being used.
 
+### Relationship graph
+
+Open any dataset and choose **Relationship graph**, or choose **View connections** on a record’s detail page. Existing imports work immediately; no reimport or schema migration is needed. The graph inherits the table’s column filters, search, and sort. Choose **Records** to adjust column filters.
+
+- Select an entity to inspect its relationships, source field paths, and links back to the original records. Follow another entity from the evidence panel, or open its external identifier.
+- Drag a node or its identifier to move them together and reposition its connecting lines. Dragging preserves the selected node and highlighted neighborhood; click without dragging to change selection. Positions last for the current page and reset on reload. Drag the background to pan.
+- Toggle entity types, search within the visible graph, zoom, or use the keyboard-accessible entity list. Light and dark modes use the existing theme.
+- Solid lines represent explicit metadata relationships; dashed lines are **unreviewed MONDO disease proposals**. Dotted links derive repository membership from an identifier namespace. Links do not imply causation, and free-text descriptions/annotations are not mined for assertions.
+- The view examines 25 matching records by default (10, 25, 50, or 100 selectable). Use **Next records** to move through the filtered dataset. It caps each view at 400 entities, 800 relationships, and 8 MiB of input JSON; oversized records are skipped with a notice. Nested collections are capped at 100 items (disease-value lists at 50). This is a bounded projection, not a complete dataset-wide graph. Each relationship shows up to five supporting source fields.
+- **Export graph JSON** exports the current projection, evidence, counts, and scope. It does not export an entire multi-gigabyte dataset as a graph.
+
+Supported inputs include the imported NCBI `combined.v2` data, flat `genome.*` BV-BRC fields, and engine source/proposal records with recognized accessions. Arbitrary metrics datasets may have no supported relationships. NIAID program links require explicit `niaid_program` or `niaid_programs` fields on an identified entity; affiliation and grant numbers alone do not establish a program assignment.
+
+**Import repository curation results** is available on the graph page (and empty welcome page) when `data/raw/records.jsonl` and `data/out/proposals.jsonl` exist in the parent repository. It creates a separate dataset, joins on exact `record_id`, retains both original objects and their file paths, and leaves unmatched proposals unattached. Duplicate IDs fail the import rather than creating ambiguous links. Only proposed MONDO terms present in `candidate_curies` become proposed-disease edges; retrieved candidates alone are not assertions. Each click creates a new dataset, consistent with ordinary imports.
+
+The convenience importer accepts up to 16 MiB and 10,000 records per input file. Set `EXPLORER_REPOSITORY_ROOT` before starting the server if the repository is elsewhere. A standalone/container deployment does not need these files: existing imported datasets and JSONL uploads still work. To enable the convenience import in a container, mount the repository read-only and set that variable to its mount point. No graph database, extra service, CDN, or additional Python package is required.
+
+See [GRAPH_DATA_MODEL.md](GRAPH_DATA_MODEL.md) for the source assessment, extraction rules, and limits of the MVP.
+
 ## Database and code layout
 
-`app.py` contains Flask routes and the CLI. `database.py` contains ingestion and parameterized SQL. `ncbi_download.py` handles cached downloads and resume; `ncbi_import.py` runs the background job and logs its progress. `templates/` contains server-rendered HTML and `static/` contains local CSS and a small amount of JavaScript. Edit `templates/detail.html` when you decide what specialized record details should show.
+`app.py` contains Flask routes and the CLI. `database.py` contains ingestion and parameterized SQL. `ncbi_download.py` handles cached downloads and resume; `ncbi_import.py` runs the background job and logs its progress. `relationships.py` extracts evidence-backed entities and links; `graph_views.py` queries bounded record selections and provides graph/import routes. `templates/` contains server-rendered HTML and `static/` contains local CSS and a small amount of JavaScript. Edit `templates/detail.html` when you decide what specialized record details should show.
 
 The SQLite schema is generic:
 
@@ -146,4 +165,4 @@ Container use is optional; choose the Python environment method if it fits the i
 python -m unittest discover -s tests -v
 ```
 
-Tests cover import rollback, malformed input, UTF-8/BOM handling, nested/unusual keys, filtering, sorting, pagination, dataset isolation, full-content exports, HTML escaping, and form CSRF protection.
+Tests cover import rollback, malformed input, UTF-8/BOM handling, nested/unusual keys, filtering, sorting, pagination, dataset isolation, full-content exports, HTML escaping, and form CSRF protection. Graph tests additionally cover explicit relationship provenance, false-positive avoidance, proposal matching, bounds, filtered/focused views, safe embedding, and repository imports.

@@ -11,6 +11,7 @@ from flask import Flask, Response, jsonify, abort, flash, g, redirect, render_te
 
 import database
 from ncbi_import import ImportJobs, NCBI_URL, NCBI_FILENAME
+from graph_views import register_graph
 
 ROOT = Path(__file__).resolve().parent
 COMMENTS_COLUMN = "__comments"
@@ -25,6 +26,7 @@ def create_app(config=None):
         MAX_CONTENT_LENGTH=128 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        REPOSITORY_ROOT=os.environ.get("EXPLORER_REPOSITORY_ROOT", str(ROOT.parent)),
     )
     if config:
         app.config.update(config)
@@ -83,6 +85,8 @@ def create_app(config=None):
         if not columns and request.args.get("columns_set") != "1":
             columns = list(fields)[:6] + [COMMENTS_COLUMN]
         return filters, columns
+
+    register_graph(app, db, get_dataset, query_state)
 
     @app.get("/")
     def index():
