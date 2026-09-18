@@ -4,7 +4,8 @@ import requests
 
 BASE_URL = "https://www.bv-brc.org/api/genome/"
 
-QUERY = "eq(taxon_id,1280)"  # Staphylococcus aureus
+QUERY = "in(taxon_lineage_ids,(1280))"
+
 
 page_size = 50
 start = 0
