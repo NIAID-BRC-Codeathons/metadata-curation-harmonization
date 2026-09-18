@@ -12,10 +12,51 @@ from flask import Flask, Response, jsonify, abort, flash, g, redirect, render_te
 import database
 from ncbi_import import ImportJobs, NCBI_URL, NCBI_FILENAME
 from graph_views import register_graph
+from report_views import register_reports
+import report_store
 
 ROOT = Path(__file__).resolve().parent
 COMMENTS_COLUMN = "__comments"
 MAX_COMMENT_LENGTH = 10000
+BIOPROJECT_ACCESSIONS_COLUMN = "__bioproject_accessions"
+PREFERRED_COLUMNS = (
+    "/genome/currentAccession",
+    "/genome/assemblyInfo/assemblyName",
+    "/genome/assemblyInfo/biosample/accession",
+    "/bvbrc/biosample_accession",
+    "/bvbrc/genbank_accessions",
+    "/bvbrc/assembly_accession",
+    "/matched_by",
+)
+
+
+def available_columns(fields):
+    columns = dict(fields)
+    if "/bioprojects" in fields and "json" in fields["/bioprojects"]:
+        columns[BIOPROJECT_ACCESSIONS_COLUMN] = ["accessions only · display column"]
+    return columns
+
+
+def default_columns(fields):
+    available = available_columns(fields)
+    bioproject = "/bioprojects/accession" if "/bioprojects/accession" in fields else BIOPROJECT_ACCESSIONS_COLUMN
+    preferred = [*PREFERRED_COLUMNS, bioproject]
+    if all(field in available for field in preferred):
+        return preferred + [COMMENTS_COLUMN]
+    return list(fields)[:6] + [COMMENTS_COLUMN]
+
+
+def table_values(obj, include_bioprojects=False):
+    values = {key: (value, kind) for key, value, kind in database.flatten(obj)}
+    if include_bioprojects:
+        projects = obj.get("bioprojects")
+        if isinstance(projects, list):
+            accessions = list(dict.fromkeys(project["accession"].strip() for project in projects
+                                           if isinstance(project, dict) and isinstance(project.get("accession"), str)
+                                           and project["accession"].strip()))
+            if accessions:
+                values[BIOPROJECT_ACCESSIONS_COLUMN] = (", ".join(accessions), "text")
+    return values
 
 
 def create_app(config=None):
@@ -60,10 +101,12 @@ def create_app(config=None):
     @app.context_processor
     def shared():
         datasets = db().execute("SELECT * FROM datasets ORDER BY id DESC").fetchall()
-        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS, ncbi_filename=NCBI_FILENAME, comments_column=COMMENTS_COLUMN)
+        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS, ncbi_filename=NCBI_FILENAME, comments_column=COMMENTS_COLUMN, bioproject_accessions_column=BIOPROJECT_ACCESSIONS_COLUMN)
 
     @app.template_filter("field_label")
     def field_label(value):
+        if value == BIOPROJECT_ACCESSIONS_COLUMN:
+            return "bioprojects › accession"
         return " › ".join(part.replace("~1", "/").replace("~0", "~") or '(empty key)' for part in value.split("/")[1:])
 
     @app.template_filter("number")
@@ -81,12 +124,18 @@ def create_app(config=None):
         if not len(f) == len(op) == len(v):
             raise database.DataError("Incomplete filter. Please choose a field, operator, and value.")
         filters = list(zip(f, op, v))
-        columns = list(dict.fromkeys(c for c in request.args.getlist("col") if c in fields or c == COMMENTS_COLUMN))
+        available = available_columns(fields)
+        columns = list(dict.fromkeys(c for c in request.args.getlist("col") if c in available or c == COMMENTS_COLUMN))
         if not columns and request.args.get("columns_set") != "1":
-            columns = list(fields)[:6] + [COMMENTS_COLUMN]
+            columns = default_columns(fields)
         return filters, columns
 
-    register_graph(app, db, get_dataset, query_state)
+    def record_where(dataset_id, fields, filters, search):
+        where, params = database.where_clause(dataset_id, fields, filters, search)
+        return report_store.apply_filter(db(), dataset_id, request.args, where, params)
+
+    register_reports(app, db, get_dataset, ROOT)
+    register_graph(app, db, get_dataset, query_state, record_where)
 
     @app.get("/")
     def index():
@@ -181,7 +230,7 @@ def create_app(config=None):
         filters, columns = query_state(fields)
         search = request.args.get("q", "").strip()
         sort, direction = request.args.get("sort", ""), request.args.get("direction", "asc")
-        where, params = database.where_clause(dataset_id, fields, filters, search)
+        where, params = record_where(dataset_id, fields, filters, search)
         order, order_params = database.order_clause(fields, sort, direction)
         try:
             page = max(1, int(request.args.get("page", 1)))
@@ -194,7 +243,7 @@ def create_app(config=None):
         pages = max(1, (count + page_size - 1) // page_size)
         page = min(page, pages)
         rows = db().execute(f"SELECT r.*, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", params + order_params + [page_size, (page - 1) * page_size]).fetchall()
-        records = [{"id": row["id"], "line": row["line_number"], "comment": row["comment"] or "", "values": {key: (value, kind) for key, value, kind in database.flatten(json.loads(row["payload"]))}} for row in rows]
+        records = [{"id": row["id"], "line": row["line_number"], "comment": row["comment"] or "", "values": table_values(json.loads(row["payload"]), BIOPROJECT_ACCESSIONS_COLUMN in columns)} for row in rows]
 
         def query_url(**changes):
             args = request.args.to_dict(flat=False)
@@ -202,7 +251,10 @@ def create_app(config=None):
                 args[key] = [str(value)]
             return url_for("explore", dataset_id=dataset_id) + "?" + urlencode(args, doseq=True)
 
-        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, columns=columns, data_columns=[c for c in columns if c != COMMENTS_COLUMN], show_comments=COMMENTS_COLUMN in columns, comment_export_key=comment_export_key(fields), filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
+        available = available_columns(fields)
+        # Keep the active column order when the Columns form is applied.
+        column_options = {key: available[key] for key in dict.fromkeys([*columns, *available]) if key in available}
+        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, reports=report_store.attachments(db(), dataset_id), report_selection=report_store.selection(db(), dataset_id, request.args), column_options=column_options, columns=columns, data_columns=[c for c in columns if c != COMMENTS_COLUMN], show_comments=COMMENTS_COLUMN in columns, comment_export_key=comment_export_key(fields), filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
 
     @app.get("/datasets/<int:dataset_id>/records/<int:record_id>")
     def detail(dataset_id, record_id):
@@ -214,13 +266,18 @@ def create_app(config=None):
         back = url_for("explore", dataset_id=dataset_id)
         if request.query_string:
             back += "?" + request.query_string.decode()
-        return render_template("detail.html", active_id=dataset_id, dataset=dataset, record=record, values=list(database.flatten(obj)), raw=json.dumps(obj, indent=2, ensure_ascii=False), back=back)
+        results = report_store.record_results(db(), dataset_id, record_id, request.args)
+        def result_url(page):
+            args = request.args.to_dict(flat=False)
+            args['result_page'] = [str(page)]
+            return url_for('detail', dataset_id=dataset_id, record_id=record_id) + '?' + urlencode(args, doseq=True) + '#result-report-view'
+        return render_template("detail.html", results=results, result_url=result_url, active_id=dataset_id, dataset=dataset, record=record, values=list(database.flatten(obj)), raw=json.dumps(obj, indent=2, ensure_ascii=False), back=back)
 
     @app.get("/datasets/<int:dataset_id>/export")
     def export(dataset_id):
         _, fields = get_dataset(dataset_id)
         filters, _ = query_state(fields)
-        where, params = database.where_clause(dataset_id, fields, filters, request.args.get("q", "").strip())
+        where, params = record_where(dataset_id, fields, filters, request.args.get("q", "").strip())
         order, order_params = database.order_clause(fields, request.args.get("sort", ""), request.args.get("direction", "asc"))
         path = app.config["DATABASE"]
         export_key = comment_export_key(fields)
