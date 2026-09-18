@@ -17,6 +17,11 @@ document.getElementById('select-all-columns')?.addEventListener('click', () => {
     checkbox.checked = true;
   });
 });
+document.getElementById('deselect-all-columns')?.addEventListener('click', () => {
+  document.querySelectorAll('#columns-dialog input[name=col]').forEach(checkbox => {
+    checkbox.checked = false;
+  });
+});
 const columnSearch = document.getElementById('column-search');
 const clearColumnSearch = document.getElementById('clear-column-search');
 const columnOptions = document.querySelectorAll('#column-options [data-column-name]');
@@ -92,5 +97,53 @@ document.getElementById('copy-json')?.addEventListener('click', async event => {
     event.target.textContent = 'Copied!';
   } catch {
     event.target.textContent = 'Select and copy the JSON below';
+  }
+});
+
+const dirtyComments = new Set();
+const savingComments = new Set();
+document.querySelectorAll('.comment-form').forEach(form => {
+  const input = form.elements.namedItem('comment');
+  const button = Array.from(form.elements).find(element => element.type === 'submit');
+  const status = document.getElementById(input.getAttribute('aria-describedby'));
+  let savedValue = input.value;
+  input.addEventListener('input', () => {
+    const dirty = input.value !== savedValue;
+    if (dirty) dirtyComments.add(form); else dirtyComments.delete(form);
+    status.textContent = dirty ? 'Unsaved changes' : 'Saved';
+  });
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (savingComments.has(form)) return;
+    savingComments.add(form);
+    const value = input.value;
+    button.disabled = true;
+    status.textContent = 'Saving…';
+    try {
+      const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } });
+      if (!response.ok || !(await response.json()).saved) throw new Error('Save failed');
+      savedValue = value;
+      if (input.value === savedValue) dirtyComments.delete(form);
+      else dirtyComments.add(form);
+      status.textContent = dirtyComments.has(form) ? 'Unsaved changes' : 'Saved';
+    } catch {
+      dirtyComments.add(form);
+      status.textContent = 'Could not save. Please retry; if this persists, copy your comment before reloading.';
+    } finally {
+      savingComments.delete(form);
+      button.disabled = false;
+    }
+  });
+});
+window.addEventListener('beforeunload', event => {
+  if (dirtyComments.size || savingComments.size) {
+    event.preventDefault();
+    event.returnValue = '';
+  }
+});
+document.querySelector('[data-export]')?.addEventListener('click', event => {
+  if (dirtyComments.size || savingComments.size) {
+    event.preventDefault();
+    window.alert('Save your edited comments and wait for saving to finish before exporting.');
   }
 });

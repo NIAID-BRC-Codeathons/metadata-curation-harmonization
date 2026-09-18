@@ -7,12 +7,14 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlencode
 
-from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, jsonify, abort, flash, g, redirect, render_template, request, session, url_for
 
 import database
 from ncbi_import import ImportJobs, NCBI_URL, NCBI_FILENAME
 
 ROOT = Path(__file__).resolve().parent
+COMMENTS_COLUMN = "__comments"
+MAX_COMMENT_LENGTH = 10000
 
 
 def create_app(config=None):
@@ -56,7 +58,7 @@ def create_app(config=None):
     @app.context_processor
     def shared():
         datasets = db().execute("SELECT * FROM datasets ORDER BY id DESC").fetchall()
-        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS, ncbi_filename=NCBI_FILENAME)
+        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS, ncbi_filename=NCBI_FILENAME, comments_column=COMMENTS_COLUMN)
 
     @app.template_filter("field_label")
     def field_label(value):
@@ -77,8 +79,9 @@ def create_app(config=None):
         if not len(f) == len(op) == len(v):
             raise database.DataError("Incomplete filter. Please choose a field, operator, and value.")
         filters = list(zip(f, op, v))
-        columns = [c for c in request.args.getlist("col") if c in fields]
-        columns = list(dict.fromkeys(columns)) or list(fields)[:6]
+        columns = list(dict.fromkeys(c for c in request.args.getlist("col") if c in fields or c == COMMENTS_COLUMN))
+        if not columns and request.args.get("columns_set") != "1":
+            columns = list(fields)[:6] + [COMMENTS_COLUMN]
         return filters, columns
 
     @app.get("/")
@@ -119,6 +122,55 @@ def create_app(config=None):
         response.headers["Cache-Control"] = "no-store"
         return response
 
+    @app.post("/datasets/<int:dataset_id>/delete")
+    def delete_dataset(dataset_id):
+        dataset, _ = get_dataset(dataset_id)
+        if request.form.get("confirm") != "delete":
+            abort(400, "Confirm dataset deletion before continuing.")
+        with db():
+            db().execute("DELETE FROM record_values WHERE record_id IN (SELECT id FROM records WHERE dataset_id=?)", (dataset_id,))
+            db().execute("DELETE FROM records WHERE dataset_id=?", (dataset_id,))
+            db().execute("DELETE FROM datasets WHERE id=?", (dataset_id,))
+        flash(f'Deleted dataset “{dataset["name"]}”.', "success")
+        return redirect(url_for("index"), code=303)
+
+    @app.post("/datasets/<int:dataset_id>/records/<int:record_id>/comment")
+    def save_comment(dataset_id, record_id):
+        if db().execute("SELECT 1 FROM records WHERE id=? AND dataset_id=?", (record_id, dataset_id)).fetchone() is None:
+            abort(404, "Record not found in this dataset.")
+        comment = request.form.get("comment", "")
+        if len(comment) > MAX_COMMENT_LENGTH:
+            abort(400, "Comments must be 10,000 characters or fewer.")
+        with db():
+            if comment:
+                db().execute("INSERT INTO record_comments(record_id, comment) VALUES (?, ?) ON CONFLICT(record_id) DO UPDATE SET comment=excluded.comment", (record_id, comment))
+            else:
+                db().execute("DELETE FROM record_comments WHERE record_id=?", (record_id,))
+        if request.headers.get("Accept") == "application/json":
+            return jsonify(saved=True)
+        flash("Comment saved.", "success")
+        target = url_for("explore", dataset_id=dataset_id)
+        if request.query_string:
+            target += "?" + request.query_string.decode()
+        return redirect(target, code=303)
+
+    def comment_export_key(fields):
+        # Use one collision-free top-level key for the entire dataset.
+        keys = {field.split("/")[1].replace("~1", "/").replace("~0", "~") for field in fields}
+        key = "comments"
+        suffix = 2
+        while key in keys:
+            key = f"comments_{suffix}"
+            suffix += 1
+        return key
+
+    def annotated_payload(row, key):
+        if row["comment"] is None:
+            return row["payload"]
+        obj = json.loads(row["payload"])
+        obj[key] = row["comment"]
+        return json.dumps(obj, ensure_ascii=False)
+
     @app.get("/datasets/<int:dataset_id>")
     def explore(dataset_id):
         dataset, fields = get_dataset(dataset_id)
@@ -137,8 +189,8 @@ def create_app(config=None):
         count = db().execute(f"SELECT count(*) FROM records r WHERE {where}", params).fetchone()[0]
         pages = max(1, (count + page_size - 1) // page_size)
         page = min(page, pages)
-        rows = db().execute(f"SELECT r.* FROM records r WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", params + order_params + [page_size, (page - 1) * page_size]).fetchall()
-        records = [{"id": row["id"], "line": row["line_number"], "values": {key: (value, kind) for key, value, kind in database.flatten(json.loads(row["payload"]))}} for row in rows]
+        rows = db().execute(f"SELECT r.*, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", params + order_params + [page_size, (page - 1) * page_size]).fetchall()
+        records = [{"id": row["id"], "line": row["line_number"], "comment": row["comment"] or "", "values": {key: (value, kind) for key, value, kind in database.flatten(json.loads(row["payload"]))}} for row in rows]
 
         def query_url(**changes):
             args = request.args.to_dict(flat=False)
@@ -146,12 +198,12 @@ def create_app(config=None):
                 args[key] = [str(value)]
             return url_for("explore", dataset_id=dataset_id) + "?" + urlencode(args, doseq=True)
 
-        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, columns=columns, filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
+        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, columns=columns, data_columns=[c for c in columns if c != COMMENTS_COLUMN], show_comments=COMMENTS_COLUMN in columns, comment_export_key=comment_export_key(fields), filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
 
     @app.get("/datasets/<int:dataset_id>/records/<int:record_id>")
     def detail(dataset_id, record_id):
         dataset, _ = get_dataset(dataset_id)
-        record = db().execute("SELECT * FROM records WHERE id=? AND dataset_id=?", (record_id, dataset_id)).fetchone()
+        record = db().execute("SELECT r.*, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE r.id=? AND r.dataset_id=?", (record_id, dataset_id)).fetchone()
         if record is None:
             abort(404, "Record not found in this dataset.")
         obj = json.loads(record["payload"])
@@ -167,12 +219,13 @@ def create_app(config=None):
         where, params = database.where_clause(dataset_id, fields, filters, request.args.get("q", "").strip())
         order, order_params = database.order_clause(fields, request.args.get("sort", ""), request.args.get("direction", "asc"))
         path = app.config["DATABASE"]
+        export_key = comment_export_key(fields)
 
         def generate():
             connection = database.connect(path)
             try:
-                for row in connection.execute(f"SELECT r.payload FROM records r WHERE {where} ORDER BY {order}", params + order_params):
-                    yield row[0] + "\n"
+                for row in connection.execute(f"SELECT r.payload, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE {where} ORDER BY {order}", params + order_params):
+                    yield annotated_payload(row, export_key) + "\n"
             finally:
                 connection.close()
 
@@ -180,10 +233,11 @@ def create_app(config=None):
 
     @app.get("/datasets/<int:dataset_id>/records/<int:record_id>/download")
     def download_record(dataset_id, record_id):
-        row = db().execute("SELECT payload FROM records WHERE id=? AND dataset_id=?", (record_id, dataset_id)).fetchone()
+        _, fields = get_dataset(dataset_id)
+        row = db().execute("SELECT r.payload, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE r.id=? AND r.dataset_id=?", (record_id, dataset_id)).fetchone()
         if row is None:
             abort(404)
-        return Response(row[0] + "\n", mimetype="application/json", headers={"Content-Disposition": f'attachment; filename="record-{record_id}.json"'})
+        return Response(annotated_payload(row, comment_export_key(fields)) + "\n", mimetype="application/json", headers={"Content-Disposition": f'attachment; filename="record-{record_id}.json"'})
 
     @app.errorhandler(database.DataError)
     def data_error(error):
