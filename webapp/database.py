@@ -1,12 +1,13 @@
 """Streaming JSONL ingestion and parameterized SQLite queries. No ORM required."""
 import json
 import math
+import os
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
-MAX_LINE = 8 * 1024 * 1024
+MAX_LINE = 64 * 1024 * 1024
 MAX_FIELDS = 500
 OPERATORS = {
     "contains": "contains", "eq": "equals", "ne": "does not equal",
@@ -30,6 +31,8 @@ def connect(path):
 def initialize(path):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with closing(connect(path)) as db, db:
+        # Long imports must not block the progress page or existing dataset reads.
+        db.execute("PRAGMA journal_mode=WAL")
         db.executescript("""
             CREATE TABLE IF NOT EXISTS datasets (
                 id INTEGER PRIMARY KEY, name TEXT NOT NULL, source TEXT NOT NULL,
@@ -87,8 +90,15 @@ def unique_object(pairs):
     return result
 
 
-def import_jsonl(db, stream, name, source):
+def import_jsonl(db, stream, name, source, on_progress=None):
     """All-or-nothing import; memory is bounded by one record and field metadata."""
+    try:
+        max_record_mib = int(os.environ.get("EXPLORER_MAX_RECORD_MIB", str(MAX_LINE // (1024 * 1024))))
+        if max_record_mib < 1:
+            raise ValueError()
+    except ValueError:
+        raise DataError("EXPLORER_MAX_RECORD_MIB must be a positive whole number of MiB.") from None
+    max_line_bytes = max_record_mib * 1024 * 1024
     fields = {}
     count = 0
     line_no = 0
@@ -98,13 +108,13 @@ def import_jsonl(db, stream, name, source):
             (name.strip()[:200] or source, source, datetime.now(timezone.utc).isoformat()),
         ).lastrowid
         while True:
-            raw = stream.readline(MAX_LINE + 1)
+            raw = stream.readline(max_line_bytes + 1)
             if not raw:
                 break
             line_no += 1
             try:
-                if len(raw) > MAX_LINE:
-                    raise DataError("Record exceeds the 8 MiB line limit.")
+                if len(raw) > max_line_bytes:
+                    raise DataError(f"Record exceeds the {max_record_mib} MiB line limit. Increase EXPLORER_MAX_RECORD_MIB and restart the server to allow larger records.")
                 if isinstance(raw, bytes):
                     raw = raw.decode("utf-8-sig" if line_no == 1 else "utf-8")
                 if not raw.strip():
@@ -127,6 +137,8 @@ def import_jsonl(db, stream, name, source):
                     ((record_id, field, value, kind) for field, value, kind in values),
                 )
                 count += 1
+                if on_progress and (count == 1 or count % 1000 == 0):
+                    on_progress(count)
             except (ValueError, UnicodeError, RecursionError) as exc:
                 raise DataError(f"Line {line_no}: {exc}") from exc
         if not count:
@@ -134,6 +146,8 @@ def import_jsonl(db, stream, name, source):
         db.execute("UPDATE datasets SET record_count=?, fields=? WHERE id=?", (
             count, json.dumps({key: sorted(kinds) for key, kinds in fields.items()}), dataset_id,
         ))
+        if on_progress:
+            on_progress(count)
     return dataset_id
 
 

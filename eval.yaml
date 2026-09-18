@@ -1,0 +1,16 @@
+name: metadata-evaluation
+channels:
+  - conda-forge
+dependencies:
+
+  - numpy=2.5.2
+  - openblas=0.3.33
+  - openssl=3.6.4
+  - packaging=26.3
+  - pip=26.2.1
+  - python=3.12.14
+
+  - pip:
+      - polars==1.44.2
+      - polars-runtime-32==1.44.2
+      - oaklib==0.7.4

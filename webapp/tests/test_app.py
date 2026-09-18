@@ -1,9 +1,11 @@
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from urllib.parse import urlencode
+from unittest.mock import patch
 
 from app import create_app
 import database
@@ -141,6 +143,30 @@ class ExplorerTest(unittest.TestCase):
     def test_field_limit_and_nonfinite_nested_array_rollback(self):
         self.assertEqual(self.ingest([{str(i): i for i in range(501)}]).status_code, 400)
         self.assertEqual(self.ingest(raw=b'{"a": [1e400]}').status_code, 400)
+
+    def test_records_over_old_eight_mib_limit_and_configurable_limit(self):
+        # Real NCBI records can exceed the former 8 MiB cap.
+        obj = {"sra-experiment": "x" * (9 * 1024 * 1024)}
+        response = self.ingest([obj])
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(json.loads(self.client.get(response.location + "/export").data), obj)
+        with patch.dict(os.environ, {"EXPLORER_MAX_RECORD_MIB": "1"}):
+            response = self.ingest([obj])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"Line 1: Record exceeds the 1 MiB line limit", response.data)
+        self.assertIn(b"EXPLORER_MAX_RECORD_MIB", response.data)
+        connection = database.connect(self.path)
+        try:
+            self.assertEqual(connection.execute("SELECT count(*) FROM datasets").fetchone()[0], 1)
+        finally:
+            connection.close()
+
+    def test_invalid_record_limit_is_actionable(self):
+        for value in ["0", "-1", "bad", "1.5"]:
+            with patch.dict(os.environ, {"EXPLORER_MAX_RECORD_MIB": value}):
+                response = self.ingest([{"a": 1}])
+            self.assertEqual(response.status_code, 400)
+            self.assertIn(b"must be a positive whole number", response.data)
 
 
 if __name__ == "__main__":

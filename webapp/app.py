@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from flask import Flask, Response, abort, flash, g, redirect, render_template, request, session, url_for
 
 import database
+from ncbi_import import ImportJobs, NCBI_URL, NCBI_FILENAME
 
 ROOT = Path(__file__).resolve().parent
 
@@ -26,6 +27,8 @@ def create_app(config=None):
     if config:
         app.config.update(config)
     database.initialize(app.config["DATABASE"])
+    ncbi_jobs = ImportJobs(app.config["DATABASE"])
+    app.extensions["ncbi_imports"] = ncbi_jobs
 
     def db():
         if "db" not in g:
@@ -53,7 +56,7 @@ def create_app(config=None):
     @app.context_processor
     def shared():
         datasets = db().execute("SELECT * FROM datasets ORDER BY id DESC").fetchall()
-        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS)
+        return dict(datasets=datasets, total_records=sum(d["record_count"] for d in datasets), operators=database.OPERATORS, ncbi_filename=NCBI_FILENAME)
 
     @app.template_filter("field_label")
     def field_label(value):
@@ -101,6 +104,20 @@ def create_app(config=None):
             dataset_id = database.import_jsonl(db(), stream, "Materials screening · sample", "engine-output.jsonl")
         flash("Sample data loaded. Import your own JSONL whenever you’re ready.", "success")
         return redirect(url_for("explore", dataset_id=dataset_id))
+
+    @app.post("/import/ncbi")
+    def import_ncbi():
+        job_id = ncbi_jobs.start()
+        return redirect(url_for("ncbi_status", job_id=job_id), code=303)
+
+    @app.get("/imports/ncbi/<job_id>")
+    def ncbi_status(job_id):
+        job = ncbi_jobs.snapshot(job_id)
+        if job is None:
+            abort(404, "This import status is no longer available. If the server restarted, check the dataset list for a completed import or start again.")
+        response = app.make_response(render_template("ncbi_status.html", job=job, source=NCBI_URL, active_id=None))
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.get("/datasets/<int:dataset_id>")
     def explore(dataset_id):

@@ -1,0 +1,15 @@
+.import-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.import-actions form { margin: 0; }
+.import-progress { padding: 28px; }
+.import-progress p { line-height: 1.8; overflow-wrap: anywhere; }
+.import-progress a:not(.button) { text-decoration: underline; }
+.import-progress progress { width: 100%; height: 14px; accent-color: var(--green); margin: 15px 0; }
+.import-metrics { display: flex; flex-wrap: wrap; gap: 30px; margin: 28px 0 12px; }
+.import-metrics strong { display: block; font-size: 25px; font-weight: 500; margin-top: 10px; }
+.import-metrics small { font-size: 14px; color: var(--muted); }
+@media (max-width: 760px) {
+  .page-heading:has(.import-actions) { flex-wrap: wrap; }
+  .import-actions { justify-content: flex-start; }
+  .import-actions .button { font-size: 11px; }
+  .import-progress { padding: 20px; }
+}

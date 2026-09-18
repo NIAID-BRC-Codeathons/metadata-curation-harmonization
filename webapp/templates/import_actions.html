@@ -1,0 +1,7 @@
+<div class="import-actions">
+  <form action="{{ url_for('import_ncbi') }}" method="post" class="ncbi-import-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <button class="button" type="submit" title="Download and import {{ ncbi_filename }} from NCBI">↓ Import Brad's data</button>
+  </form>
+  <button class="button primary" data-open="import-dialog">+ Import JSONL</button>
+</div>

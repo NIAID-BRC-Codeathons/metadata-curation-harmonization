@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}NCBI import · Engine Explorer{% endblock %}
+{% block extra_head %}{% if job.state == 'running' %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">IMPORT FROM BRAD</span><h1>{{ 'Import complete' if job.state == 'complete' else 'Import unsuccessful' if job.state == 'failed' else 'Importing NCBI data' }}</h1><p>{{ ncbi_filename }} → SQLite</p></div></div>
+<section class="data-panel import-progress">
+  <p role="status">{{ job.message }}</p>
+  {% if job.error %}
+  <details open>
+    <summary>Error details</summary>
+    <pre>{{ job.error }}</pre>
+    <p>Import ID: <code>{{ job.id }}</code><br>Server log: <code>{{ job.log_path }}</code></p>
+    <p class="muted">The log includes the full traceback and progress at failure. It is also written to the server terminal; server-side download errors do not appear in the browser console.</p>
+  </details>
+  {% endif %}
+  <p class="muted">Source: <a href="{{ source }}">NCBI / datasets / .argonne / {{ ncbi_filename }} ↗</a></p>
+  <div class="import-metrics">
+    <div><span class="stat-label">COMPRESSED DATA RECEIVED</span><strong>{{ '%.1f'|format(job.downloaded / 1048576) }} MiB{% if job.total %} <small>/ {{ '%.1f'|format(job.total / 1048576) }} MiB</small>{% endif %}</strong></div>
+    <div><span class="stat-label">RECORDS {{ 'IMPORTED' if job.state == 'complete' else 'PROCESSED' }}</span><strong>{{ job.records|number }}</strong></div>
+  </div>
+  {% if job.state == 'running' %}
+  {% if job.phase == 'importing' %}
+  <progress aria-label="Importing records from the downloaded archive"></progress>
+  <p class="muted">Download finished. The record count above updates as the local file is processed; the download percentage does not measure database import completion.</p>
+  {% else %}
+  <progress aria-label="Compressed download progress" {% if job.total %}value="{{ job.downloaded }}" max="{{ job.total }}"{% endif %}></progress>
+  {% endif %}
+  <p class="muted">This page refreshes every three seconds. The import continues if you leave this page; keep the server running. Records become available after the entire file is validated and saved.</p>
+  <p class="form-note">The compressed archive is cached for retry. Decompressed records and SQLite indexes can require substantially more disk space than the download.</p>
+  <a class="button" href="{{ url_for('index') }}">Back to explorer</a>
+  {% elif job.state == 'complete' %}
+  <a class="button primary" href="{{ url_for('explore', dataset_id=job.dataset_id) }}">Explore imported records →</a>
+  {% else %}
+  {% include 'import_actions.html' %}
+  <p><a class="back-link" href="{{ url_for('index') }}">← Back to explorer</a></p>
+  {% endif %}
+</section>
+{% endblock %}
