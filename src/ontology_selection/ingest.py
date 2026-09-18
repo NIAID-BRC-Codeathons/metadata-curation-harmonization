@@ -93,12 +93,13 @@ def normalize_combined_record(raw: Dict[str, Any], config: Dict[str, Any]) -> Re
     # Flatten biosample attributes array -> dict
     attrs = flatten_biosample_attributes(bs.get('attributes', []))
 
-    # Record ID: prefer bv_brc genome_id, then biosample accession,
-    # then genome accession.
+    # Record ID: prefer genome.currentAccession (the stable assembly
+    # accession), then genome.accession, then biosample accession.
     record_id = _coalesce(
-        bvb.get('genome_id'),
-        bs.get('accession'),
+        extract_nested_field(raw, 'genome.currentAccession'),
         extract_nested_field(raw, 'genome.accession'),
+        bs.get('accession'),
+        bvb.get('genome_id'),
     ) or f"unknown_{hash(json.dumps(raw, sort_keys=True, default=str)) % 1_000_000}"
 
     return RecordInput(

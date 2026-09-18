@@ -18,7 +18,7 @@ class RecordInput(BaseModel):
     This is the flattened/simplified version of complex BV-BRC JSON.
     The ingest module converts raw BV-BRC data to this format.
     """
-    record_id: str  # Primary identifier (biosample accession or genome_id)
+    record_id: str  # Primary identifier (genome.currentAccession from combined.jsonl)
     
     # Key metadata fields (extracted from nested BV-BRC structure)
     isolation_source: Optional[str] = None
