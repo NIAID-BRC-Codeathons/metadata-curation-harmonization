@@ -42,7 +42,7 @@ def repository_rows(root):
     return rows, matched, len(set(proposals) - set(raw))
 
 
-def register_graph(app, db, get_dataset, query_state):
+def register_graph(app, db, get_dataset, query_state, record_where):
     @app.context_processor
     def graph_context():
         root = Path(app.config["REPOSITORY_ROOT"])
@@ -64,7 +64,7 @@ def register_graph(app, db, get_dataset, query_state):
         dataset, fields = get_dataset(dataset_id)
         filters, _ = query_state(fields)
         search = request.args.get("q", "").strip()
-        where, params = database.where_clause(dataset_id, fields, filters, search)
+        where, params = record_where(dataset_id, fields, filters, search)
         order, order_params = database.order_clause(fields, request.args.get("sort", ""), request.args.get("direction", "asc"))
         try:
             size = int(request.args.get("graph_size", "25"))

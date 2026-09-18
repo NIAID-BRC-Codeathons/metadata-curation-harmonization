@@ -56,6 +56,8 @@ def initialize(path):
             CREATE INDEX IF NOT EXISTS values_lookup ON record_values(field, value, record_id);
         """)
 
+        from report_store import initialize as initialize_reports
+        initialize_reports(db)
 
 def flatten(obj, prefix="", depth=0):
     if depth > 30:

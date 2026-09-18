@@ -120,15 +120,16 @@ def extract_nested_field(data: Dict[str, Any], path: str) -> Any:
 
 def flatten_biosample_attributes(attributes: List[Dict[str, str]]) -> Dict[str, str]:
     """
-    Flatten biosample attributes to a {name: value} dictionary.
+    Flatten biosample ``attribute_recs`` to a ``{name: value}`` dictionary.
 
-    Accepts two formats:
+    V2 ``attribute_recs`` entries look like::
 
-    - **V1:** list of ``{"name": "strain", "value": "Bmb9393"}``
-    - **V2 (attribute_recs):** list of ``{"attribute_name": "strain", "value": "Bmb9393", ...}``
+        {"attribute_name": "isolation-source", "value": "throat",
+         "harmonized_name": "isolation_source", "display_name": "isolation source"}
 
-    The V2 ``attribute_recs`` format uses ``attribute_name`` instead of ``name``.
-    Both are normalised to the same output.
+    We key on **harmonized_name** (e.g. ``isolation_source``) because that is
+    the stable, normalised identifier our pipeline expects.  Falls back to
+    ``attribute_name`` or ``name`` if ``harmonized_name`` is absent.
     """
     if not attributes:
         return {}
@@ -137,11 +138,9 @@ def flatten_biosample_attributes(attributes: List[Dict[str, str]]) -> Dict[str, 
     for attr in attributes:
         if not isinstance(attr, dict):
             continue
-        # V1: {"name": ..., "value": ...}
-        name = attr.get('name')
-        # V2: {"attribute_name": ..., "value": ...}
-        if name is None:
-            name = attr.get('attribute_name')
+        # Prefer harmonized_name (V2, stable), then name (V1), then
+        # attribute_name (V2 raw — non-standard casing / punctuation).
+        name = attr.get('harmonized_name') or attr.get('name') or attr.get('attribute_name')
         value = attr.get('value')
         if name and value is not None:
             result[name] = value

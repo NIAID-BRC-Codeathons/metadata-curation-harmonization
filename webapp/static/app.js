@@ -123,6 +123,9 @@ document.querySelectorAll('.comment-form').forEach(form => {
       const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } });
       if (!response.ok || !(await response.json()).saved) throw new Error('Save failed');
       savedValue = value;
+      document.querySelectorAll('[data-record-comment-id]').forEach(copy => {
+        if (copy.dataset.recordCommentId === form.dataset.recordId) copy.textContent = value;
+      });
       if (input.value === savedValue) dirtyComments.delete(form);
       else dirtyComments.add(form);
       status.textContent = dirtyComments.has(form) ? 'Unsaved changes' : 'Saved';
@@ -146,4 +149,15 @@ document.querySelector('[data-export]')?.addEventListener('click', event => {
     event.preventDefault();
     window.alert('Save your edited comments and wait for saving to finish before exporting.');
   }
+});
+
+// Keep result pagination and direct links on the Result Report tab.
+if (window.location.hash === '#result-report-view') {
+  document.querySelector('[data-tab="result-report-view"]')?.click();
+}
+
+document.getElementById('report-upload-form')?.addEventListener('submit', event => {
+  const button = event.target.querySelector('[type=submit]');
+  button.disabled = true;
+  button.textContent = 'Attaching and matching…';
 });

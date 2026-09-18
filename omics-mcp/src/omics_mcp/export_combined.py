@@ -47,6 +47,16 @@ def combine_records(maps, keys):
     return result
 
 
+def elide_genome_fields(genome):
+    assembly_info = genome.get("assemblyInfo")
+
+    if isinstance(assembly_info, dict):
+        assembly_info.pop("biosample", None)
+        assembly_info.pop("bioprojectLineage", None)
+
+    return genome
+
+
 def master_wgs_accession(genome):
     url = (genome.get("wgsInfo") or {}).get("masterWgsUrl")
 
@@ -300,8 +310,14 @@ def main():
                     bvbrc_count += 1
                     matched_bvbrc.add(bvbrc_id)
 
+                genome = (
+                    elide_genome_fields(json.loads(genome_json))
+                    if genome_json
+                    else None
+                )
+
                 record = {
-                    "genome": json.loads(genome_json) if genome_json else None,
+                    "genome": genome,
                     "bvbrc": json.loads(bvbrc_json) if bvbrc_json else None,
                     "matched_by": matched_by,
                     "bioprojects": bioprojects,

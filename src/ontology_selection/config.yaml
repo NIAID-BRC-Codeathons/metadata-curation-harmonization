@@ -20,38 +20,57 @@ ontologies:
     description: "Environmental contexts and locations"
     fields_hint: "isolation_source, geo_loc_name, environment, habitat"
 
-# Field Selection Configuration
+# Field Selection Configuration (V2 combined.jsonl format)
+#
+# These lists guide which raw fields the ingest normaliser extracts into
+# RecordInput.  The Plan agent LLM sees ALL RecordInput fields plus the
+# full biosample_attributes dict, so it is deliberately broad.
 field_selection:
-  # Stop list: paths to ignore (never send to Plan agent)
-  ignore_paths:
-    - "genomes.assemblyInfo.assemblyStats"
-    - "genomes.assemblyInfo.sequencingTech"
-    - "genomes.assemblyInfo.assemblyMethod"
-    - "genomes.assemblyInfo.releaseDate"
-    - "genomes.assemblyInfo.submitter"
-    - "genomes.biosample.submissionDate"
-    - "genomes.biosample.publicationDate"
-    - "genomes.biosample.lastUpdated"
-    - "genomes.biosample.owner"
-    - "genomes.biosample.status"
-    - "genomes.biosample.sampleIds"
-    - "genomes.biosample.models"
-    - "genomes.biosample.package"
-    - "genomes.bioproject.accession"  # Keep just the ID, not full object
-    - "genomes.sra.runs"  # Too low-level
-  
-  # Consider list: paths that are potentially useful
-  consider_paths:
-    - "genomes.biosample.host"
-    - "genomes.biosample.geoLocName"
-    - "genomes.biosample.collectionDate"
-    - "genomes.biosample.attributes"  # Array of {name, value}
-    - "genomes.biosample.description.title"
-    - "genomes.bioproject.title"
-    - "genomes.bioproject.description"
-  
-  # Flatten biosample.attributes array to top-level fields
-  flatten_attributes: true
+  # Stop list: biosample attribute harmonized_names to never surface.
+  # These are administrative / sequencing metadata, not useful for
+  # ontology curation.
+  ignore_attributes:
+    - "collected_by"
+    - "lat_lon"
+    - "submission_date"
+    - "publication_date"
+    - "last_update"
+    - "sra_sample"
+    - "id"
+    - "taxon_id"
+
+  # Consider list: biosample attribute harmonized_names known to carry
+  # ontology-relevant information.  The Plan agent also sees every
+  # attribute not on the ignore list, so this is informational only.
+  consider_attributes:
+    - "isolation_source"
+    - "host"
+    - "host_disease"
+    - "disease"
+    - "body_sample_site"
+    - "tissue"
+    - "tissue_type"
+    - "sample_type"
+    - "env_medium"
+    - "env_broad_scale"
+    - "env_local_scale"
+    - "geo_loc_name"
+    - "collection_date"
+    - "strain"
+    - "note"
+    - "description"
+
+  # BV-BRC (bvbrc dict) fields to extract
+  consider_bvbrc:
+    - "isolation_source"
+    - "host_name"
+    - "host_common_name"
+    - "body_sample_site"
+    - "disease"
+    - "geographic_location"
+    - "collection_date"
+    - "strain"
+    - "comments"
 
 # Parallelization Settings
 # Stage commands, artifact paths and RAG settings live in ../../pipeline.yaml.

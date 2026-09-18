@@ -1,0 +1,45 @@
+2026-09-18 11:04:43,972 - ontology_selection.resolve_agent - ERROR - Resolve agent failed for GCA_036492515.1: Error code: 400 - {'error': {'message': 'Error code: 400 - {\'error\': {\'message\': "The response was filtered due to the prompt triggering Azure OpenAI\'s content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766", \'type\': None, \'param\': \'prompt\', \'code\': \'content_filter\', \'status\': 400, \'innererror\': {\'code\': \'ResponsibleAIPolicyViolation\', \'content_filter_result\': {\'hate\': {\'filtered\': False, \'severity\': \'safe\'}, \'jailbreak\': {\'detected\': False, \'filtered\': False}, \'self_harm\': {\'filtered\': False, \'severity\': \'safe\'}, \'sexual\': {\'filtered\': False, \'severity\': \'safe\'}, \'violence\': {\'filtered\': True, \'severity\': \'medium\'}}}}}', 'type': 'BadRequestError', 'code': 'internal_error'}}
+Traceback (most recent call last):
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 1904, in _generate
+    raw_response = self.client.with_raw_response.create(**payload)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/openai/_legacy_response.py", line 369, in wrapped
+    return cast(LegacyAPIResponse[R], func(*args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/openai/_utils/_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/openai/resources/chat/completions/completions.py", line 1308, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/openai/_base_client.py", line 1378, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/openai/_base_client.py", line 1151, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.BadRequestError: Error code: 400 - {'error': {'message': 'Error code: 400 - {\'error\': {\'message\': "The response was filtered due to the prompt triggering Azure OpenAI\'s content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766", \'type\': None, \'param\': \'prompt\', \'code\': \'content_filter\', \'status\': 400, \'innererror\': {\'code\': \'ResponsibleAIPolicyViolation\', \'content_filter_result\': {\'hate\': {\'filtered\': False, \'severity\': \'safe\'}, \'jailbreak\': {\'detected\': False, \'filtered\': False}, \'self_harm\': {\'filtered\': False, \'severity\': \'safe\'}, \'sexual\': {\'filtered\': False, \'severity\': \'safe\'}, \'violence\': {\'filtered\': True, \'severity\': \'medium\'}}}}}', 'type': 'BadRequestError', 'code': 'internal_error'}}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/curtish/Documents/codeathon2026/metadata-curation-harmonization/src/ontology_selection/resolve_agent.py", line 145, in resolve
+    result = self.chain.invoke({
+             ^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_core/runnables/base.py", line 3456, in invoke
+    input_ = context.run(step.invoke, input_, config)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 488, in invoke
+    self.generate_prompt(
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 1877, in generate_prompt
+    return self.generate(prompt_messages, stop=stop, callbacks=callbacks, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 1684, in generate
+    self._generate_with_cache(
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_core/language_models/chat_models.py", line 2022, in _generate_with_cache
+    result = self._generate(
+             ^^^^^^^^^^^^^^^
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 1907, in _generate
+    _handle_openai_bad_request(e)
+  File "/opt/homebrew/anaconda3/envs/ontology-selection/lib/python3.12/site-packages/langchain_openai/chat_models/base.py", line 644, in _handle_openai_bad_request
+    raise OpenAIInvalidRequestError(
+langchain_openai.chat_models.base.OpenAIInvalidRequestError: Error code: 400 - {'error': {'message': 'Error code: 400 - {\'error\': {\'message\': "The response was filtered due to the prompt triggering Azure OpenAI\'s content management policy. Please modify your prompt and retry. To learn more about our content filtering policies please read our documentation: https://go.microsoft.com/fwlink/?linkid=2198766", \'type\': None, \'param\': \'prompt\', \'code\': \'content_filter\', \'status\': 400, \'innererror\': {\'code\': \'ResponsibleAIPolicyViolation\', \'content_filter_result\': {\'hate\': {\'filtered\': False, \'severity\': \'safe\'}, \'jailbreak\': {\'detected\': False, \'filtered\': False}, \'self_harm\': {\'filtered\': False, \'severity\': \'safe\'}, \'sexual\': {\'filtered\': False, \'severity\': \'safe\'}, \'violence\': {\'filtered\': True, \'severity\': \'medium\'}}}}}', 'type': 'BadRequestError', 'code': 'internal_error'}}
