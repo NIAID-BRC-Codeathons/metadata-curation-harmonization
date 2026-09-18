@@ -77,6 +77,21 @@ This is a per-record limit, separate from the browser upload limit. Parsing and 
 
 ### Table and record controls
 
+For datasets with the combined v2 fields, the default table shows these columns in order, followed by Comments:
+
+1. `genome.currentAccession`
+2. `genome.assemblyInfo.assemblyName`
+3. `genome.assemblyInfo.biosample.accession`
+4. `bvbrc.biosample_accession`
+5. `bvbrc.genbank_accessions`
+6. `bvbrc.assembly_accession`
+7. `matched_by`
+8. `bioprojects.accession`
+
+The preset is selected by available fields, not the dataset name. If any required field is absent from the dataset schema, the app falls back to its first six discovered fields plus Comments. A field may still be missing or null on individual rows. Explicit column choices in the URL (including hiding every column) take precedence; open the dataset from the sidebar or use **Reset view** to restore defaults.
+
+For the combined v2 array of BioProjects, `bioprojects.accession` is a display column listing distinct, nonempty accessions in source order. It works with already imported data without reimporting or changing SQLite. This derived column is not sortable; use search or filter the original `bioprojects` field to find an accession. The complete `bioprojects` column is still selectable, and record details and exports retain the original objects. If a dataset instead supplies a regular `bioprojects.accession` field, the preset uses that field with normal filtering and sorting.
+
 The house-shaped **Home** link at the top of the sidebar returns to the home route (the latest dataset when available). The adjacent moon/sun button switches between light and dark mode. The app initially follows your system theme and remembers an explicit choice in this browser when local storage is available.
 
 - **Columns:** Select which discovered fields appear in the table, or click **Select all** / **Deselect all** to check or uncheck every column at once (including Comments). Use **Search columns** to filter the list by column name as you type (case-insensitive); clearing the search restores the full list. Searching preserves your selections; both bulk buttons include fields hidden by the search. Applying with no columns selected leaves only row numbers and Details links. You can uncheck individual fields before clicking **Apply columns**. Nested fields display with a `›` separator.
@@ -90,9 +105,44 @@ The house-shaped **Home** link at the top of the sidebar returns to the home rou
 - **Export:** Export JSONL downloads all matching records in the selected sort order, across all pages, retaining every field regardless of visible columns. Record details also offer an individual JSON download.
 - **Saved views:** Bookmark or share the current URL to retain columns, filters, sorting, and page. Dataset IDs are specific to the database being used.
 
+### Attach result reports
+
+Choose **Result reports** beside a dataset’s graph/export controls, then upload a JSONL report. Each nonblank report line must be an object containing nonempty **string** `record_id` and `run_id` values. Select which two dataset text fields correspond to those IDs; the form suggests `record_id` / `run_id` or a recognized assembly accession field when available.
+
+Matching requires exact, case-sensitive equality of **both** keys on the same dataset row, including accession versions. It is scoped to the chosen dataset. Missing/null IDs, a different run, and merely similar accessions do not match. The app does not guess run IDs or modify source records to supply them. For the existing NCBI data without run IDs, use a run-bearing dataset or the demo below. If multiple dataset rows have the same pair, all are matched; multiple report entries for the same pair (such as ENVO, MONDO, and UBERON) are all retained.
+
+Uploads are atomic and bounded by 128 MiB per file, 1 MiB per line, and 100,000 report entries. Invalid JSON, duplicate object keys, nonfinite numbers, and missing/invalid IDs reject the entire attachment with the offending source line. Matching uses the existing SQLite field/value indexes and stores links, rather than repeatedly scanning JSON payloads. New reports coexist with earlier attachments; there is no silent replacement or deduplication of report entries.
+
+After attaching, the table opens on matched rows. Use the report controls above the table to select an attachment (or any attached report), **All dataset rows**, **Matched rows**, or **Unmatched rows**, and optionally an exact report run ID. Click **Apply report filter**. The scope combines with existing column filters and search, persists in the URL, and applies to pagination, sorting, JSONL export, and the relationship graph. “All dataset rows” removes the report-match restriction while preserving other active filters. It does not clear column filters/search.
+
+Matching records gain a **Result Report** tab beside **Raw JSON**. It displays each entry’s ontology, run, report name, source line, and every supplied metric, including nulls and zero values. When a report/run is selected in the table, the detail view uses that selection and offers **Show all results** for other attachments. Results paginate at 25 entries per page. These metrics are displayed as reported; they do not automatically become approved annotations or graph assertions. Original record JSON and dataset exports remain unchanged by report attachments.
+
+The report management page shows both distinct matched dataset rows and matched/unmatched report-entry counts. Download the full report or just unmatched entries to investigate missing IDs. **Delete report** requires confirmation and removes that attachment’s entries and links, preserving dataset records, comments, and other reports. Deleting a dataset also removes its reports. Stale URLs referencing a deleted report return “Report not found” instead of silently widening the result set.
+
+**Load report demo** on the management page creates a separate four-row dataset and attaches the supplied six-entry example report. Two source records are copied from the NCBI v2 dataset with added `record_id` and `run_id: "demo"`; two clearly labeled synthetic rows illustrate no match and the same record ID with a different run. The example files are `examples/report-dataset.jsonl` and `examples/result-report.jsonl`; you can also upload them manually to test attaching/deleting reports. Existing NCBI records are never edited by the demo.
+
+### Relationship graph
+
+Open any dataset and choose **Relationship graph**, or choose **View connections** on a record’s detail page. Existing imports work immediately; no reimport or schema migration is needed. The graph inherits the table’s column filters, search, and sort. Choose **Records** to adjust column filters.
+
+- Select an entity to inspect its relationships, source field paths, and links back to the original records. Follow another entity from the evidence panel, or open its external identifier.
+- Drag a node or its identifier to move them together and reposition its connecting lines. Dragging preserves the selected node and highlighted neighborhood; click without dragging to change selection. Positions last for the current page and reset on reload. Drag the background to pan.
+- Toggle entity types, search within the visible graph, zoom, or use the keyboard-accessible entity list. Light and dark modes use the existing theme.
+- Solid lines represent explicit metadata relationships; dashed lines are **unreviewed MONDO disease proposals**. Dotted links derive repository membership from an identifier namespace. Links do not imply causation, and free-text descriptions/annotations are not mined for assertions.
+- The view examines 25 matching records by default (10, 25, 50, or 100 selectable). Use **Next records** to move through the filtered dataset. It caps each view at 400 entities, 800 relationships, and 8 MiB of input JSON; oversized records are skipped with a notice. Nested collections are capped at 100 items (disease-value lists at 50). This is a bounded projection, not a complete dataset-wide graph. Each relationship shows up to five supporting source fields.
+- **Export graph JSON** exports the current projection, evidence, counts, and scope. It does not export an entire multi-gigabyte dataset as a graph.
+
+Supported inputs include the imported NCBI `combined.v2` data, flat `genome.*` BV-BRC fields, and engine source/proposal records with recognized accessions. Arbitrary metrics datasets may have no supported relationships. NIAID program links require explicit `niaid_program` or `niaid_programs` fields on an identified entity; affiliation and grant numbers alone do not establish a program assignment.
+
+**Import repository curation results** is available on the graph page (and empty welcome page) when `data/raw/records.jsonl` and `data/out/proposals.jsonl` exist in the parent repository. It creates a separate dataset, joins on exact `record_id`, retains both original objects and their file paths, and leaves unmatched proposals unattached. Duplicate IDs fail the import rather than creating ambiguous links. Only proposed MONDO terms present in `candidate_curies` become proposed-disease edges; retrieved candidates alone are not assertions. Each click creates a new dataset, consistent with ordinary imports.
+
+The convenience importer accepts up to 16 MiB and 10,000 records per input file. Set `EXPLORER_REPOSITORY_ROOT` before starting the server if the repository is elsewhere. A standalone/container deployment does not need these files: existing imported datasets and JSONL uploads still work. To enable the convenience import in a container, mount the repository read-only and set that variable to its mount point. No graph database, extra service, CDN, or additional Python package is required.
+
+See [GRAPH_DATA_MODEL.md](GRAPH_DATA_MODEL.md) for the source assessment, extraction rules, and limits of the MVP.
+
 ## Database and code layout
 
-`app.py` contains Flask routes and the CLI. `database.py` contains ingestion and parameterized SQL. `ncbi_download.py` handles cached downloads and resume; `ncbi_import.py` runs the background job and logs its progress. `templates/` contains server-rendered HTML and `static/` contains local CSS and a small amount of JavaScript. Edit `templates/detail.html` when you decide what specialized record details should show.
+`app.py` contains Flask routes and the CLI. `database.py` contains ingestion and parameterized SQL. `ncbi_download.py` handles cached downloads and resume; `ncbi_import.py` runs the background job and logs its progress. `report_store.py` stores and matches report attachments; `report_views.py` provides upload, management, download, deletion, and demo routes. `relationships.py` extracts evidence-backed entities and links; `graph_views.py` queries bounded record selections and provides graph/import routes. `templates/` contains server-rendered HTML and `static/` contains local CSS and a small amount of JavaScript. Edit `templates/detail.html` when you decide what specialized record details should show.
 
 The SQLite schema is generic:
 
@@ -100,6 +150,7 @@ The SQLite schema is generic:
 - `records`: dataset ID, original line number, and complete JSON object content.
 - `record_values`: flattened leaf fields, values, and types for filtering/sorting, indexed by record/field and field/value.
 - `record_comments`: saved per-record annotations, removed with their records. This table is added automatically when the app starts against an existing database; no reimport is required.
+- `result_reports`, `report_entries`, `report_matches`: dataset-scoped attachments, preserved JSONL entries, and exact record/run matches. These tables are added on startup without reimporting or rewriting existing data.
 
 Field identifiers use escaped JSON Pointers internally, so nested keys and literal dots, slashes, quotes, or tildes do not collide. JSON content is preserved, but original whitespace/formatting is normalized. Each database connection enables foreign keys. The app uses SQLite WAL journaling so existing datasets and import status remain readable during long imports, with a 30-second busy timeout. SQLite still allows only one writer at a time; wait for a large import to finish before starting another upload or CLI import.
 
@@ -146,4 +197,6 @@ Container use is optional; choose the Python environment method if it fits the i
 python -m unittest discover -s tests -v
 ```
 
-Tests cover import rollback, malformed input, UTF-8/BOM handling, nested/unusual keys, filtering, sorting, pagination, dataset isolation, full-content exports, HTML escaping, and form CSRF protection.
+Tests cover import rollback, malformed input, UTF-8/BOM handling, nested/unusual keys, filtering, sorting, pagination, dataset isolation, full-content exports, HTML escaping, and form CSRF protection. Graph tests additionally cover explicit relationship provenance, false-positive avoidance, proposal matching, bounds, filtered/focused views, safe embedding, and repository imports.
+
+Report tests cover exact two-key matching, nested field mapping, run/dataset isolation, slices across table/export/graph, rollback, limits, HTML escaping, pagination, deletion cascades, persistence, and the supplied demo.

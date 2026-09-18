@@ -147,3 +147,14 @@ document.querySelector('[data-export]')?.addEventListener('click', event => {
     window.alert('Save your edited comments and wait for saving to finish before exporting.');
   }
 });
+
+// Keep result pagination and direct links on the Result Report tab.
+if (window.location.hash === '#result-report-view') {
+  document.querySelector('[data-tab="result-report-view"]')?.click();
+}
+
+document.getElementById('report-upload-form')?.addEventListener('submit', event => {
+  const button = event.target.querySelector('[type=submit]');
+  button.disabled = true;
+  button.textContent = 'Attaching and matching…';
+});
