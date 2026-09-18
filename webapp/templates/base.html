@@ -17,10 +17,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></svg>
       <span>Home</span>
     </a>
-    <button class="button theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
-      <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"/></svg>
-      <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
-    </button>
+
   </div>
   <a class="button workflow-link {{ 'selected' if request.endpoint == 'workflow' }}" href="{{ url_for('workflow') }}" {% if request.endpoint == 'workflow' %}aria-current="page"{% endif %}><span aria-hidden="true">⇢</span> Workflow</a>
   <div class="workspace-label"><span class="workspace-avatar">L</span><span>Local workspace</span></div>
@@ -33,7 +30,12 @@
   <div class="sidebar-bottom"><span class="connection-dot"></span> SQLite connected<small>Stored in your workspace</small></div>
 </aside>
 <div class="app-shell">
-  <header class="topbar"><div class="breadcrumbs">Workspace <span>/</span> <strong>{{ 'Workflow' if request.endpoint == 'workflow' else 'Data Analyzer' }}</strong></div><span class="local-badge"><span class="connection-dot"></span> Local instance</span></header>
+  <header class="topbar"><div class="breadcrumbs">Workspace <span>/</span> <strong>{{ 'Workflow' if request.endpoint == 'workflow' else 'Data Analyzer' }}</strong></div><div class="topbar-actions">
+    <button class="button theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" title="Switch to dark mode">
+      <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z"/></svg>
+      <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
+    </button>
+  </div></header>
   <main>
     {% for category, message in get_flashed_messages(with_categories=true) %}<div class="notice {{ category }}" role="status">✓ {{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}

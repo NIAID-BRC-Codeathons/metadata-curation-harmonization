@@ -1,6 +1,6 @@
 :root { color-scheme: light; }
 .sidebar-controls { display: flex; align-items: center; gap: 10px; margin: 0 7px 26px; }
-.sidebar-controls svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-controls svg, .theme-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .home-link { flex: 1; justify-content: flex-start; }
 .theme-toggle { padding: 10px; min-width: 42px; min-height: 42px; }
 .sun-icon { display: none; }
@@ -29,3 +29,7 @@
 [data-theme="dark"] dialog::backdrop { background: #060d0ac4; }
 @media (max-width: 760px) { .sidebar-controls { margin: 0; } .home-link { flex: none; } }
 [data-theme="dark"] .button.danger{color:#ffb8b1;border-color:#985f59}
+
+.topbar-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.topbar { gap: 12px; }
+@media (max-width: 480px) { .topbar { height: auto; min-height: 60px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; } .topbar-actions { margin-left: auto; } }
