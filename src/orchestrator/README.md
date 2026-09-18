@@ -48,7 +48,9 @@ anything, and names the missing one if not.
 
 ## Usage
 
-Run from the repo root:
+### Test data
+
+Run from the repo root with internal test data:
 
 ```bash
 conda run -n orchestrator python scripts/run_pipeline.py --dry-run   # print commands, run nothing
@@ -68,6 +70,61 @@ PYTHONPATH=src conda run -n orchestrator python -m orchestrator --dry-run
 `--from`/`--to` slice the pipeline so a failed late stage can be rerun without
 repeating the LLM stages. `--only` runs named stages and cannot be combined with them.
 
+### Production data
+
+First download and prepare the production data
+```
+cd dataset
+make
+```
+
+Then run with the 232 representative, curated records:
+```
+# run 
+time (
+     conda run -n orchestrator --no-capture-output
+      python3 scripts/run_pipeline.py \
+     --log-level DEBUG
+     --set workers=40 \
+     --set records=dataset/v2/curated_combined.unique_isolation_host.jsonl
+)
+
+# inspect plan output
+grep GCF_000769575.1 data/intermediate/plan_outputs.jsonl| jq
+
+# inspect RAG output
+grep GCF_000769575.1 data/intermediate/rag_results.jsonl| jq
+
+# inspect final output
+grep GCF_000769575.1 data/out/proposals.jsonl| jq
+
+# inspect pipeline log
+grep GCF_000769575.1 data/out/pipeline.log
+```
+
+Then run full 6k curated records
+```
+# run 
+time (
+     conda run -n orchestrator --no-capture-output
+     python3 scripts/run_pipeline.py \
+     --log-level DEBUG
+     --set workers=40 \
+     --set records=dataset/v2/curated_combined.jsonl
+)
+```
+
+Then run full 176k full data set 
+```
+# run 
+time (
+     conda run -n orchestrator --no-capture-output
+     python3 scripts/run_pipeline.py \
+     --log-level DEBUG
+     --set workers=40 \
+     --set records=dataset/v2/combined.jsonl
+)
+```
 ## Configuration
 
 Everything lives in `pipeline.yaml` at the repo root: the artifacts passed between
