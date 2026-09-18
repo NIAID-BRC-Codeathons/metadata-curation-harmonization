@@ -64,6 +64,30 @@ def apply_overrides(config: PipelineConfig, overrides: list[str]) -> None:
             config.settings[key] = value
 
 
+def apply_run_tag(config: PipelineConfig, run: str) -> None:
+    """Rewrite artifact and log paths to use ``data.{run}/`` instead of ``data/``.
+
+    Only artifacts whose path starts with ``data/`` are rewritten.  The log file
+    path is rewritten the same way.  This keeps input artifacts (e.g. a records
+    file under ``dataset/``) untouched.
+
+    The *run* tag is also stored as a setting so stage commands can reference it
+    via ``{run}`` if needed.
+    """
+    config.settings["run"] = run
+
+    prefix_old = "data/"
+    prefix_new = f"data.{run}/"
+
+    for name, path in list(config.artifacts.items()):
+        if path.startswith(prefix_old):
+            config.artifacts[name] = prefix_new + path[len(prefix_old):]
+
+    log_file = config.logging.get("file")
+    if isinstance(log_file, str) and log_file.startswith(prefix_old):
+        config.logging["file"] = prefix_new + log_file[len(prefix_old):]
+
+
 def setup_logging(config: PipelineConfig, level: str | None) -> None:
     """Log to the console and, when the config names one, to a file."""
     settings = config.logging
@@ -125,6 +149,14 @@ def main() -> None:
         help="Override one setting or artifact path for this run. Repeatable.",
     )
     parser.add_argument(
+        "--run",
+        metavar="TAG",
+        help=(
+            "Run tag (e.g. 'v2curated-01e38f5'). Output goes to data.TAG/ "
+            "instead of data/. Only artifacts under data/ are redirected."
+        ),
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Override the log level from the config.",
@@ -137,6 +169,8 @@ def main() -> None:
     try:
         config = load_pipeline_config(args.config)
         apply_overrides(config, args.overrides)
+        if args.run:
+            apply_run_tag(config, args.run)
         stages = select_stages(config, args.only, args.from_stage, args.to_stage)
     except ConfigError as error:
         print(f"ERROR: {error}", file=sys.stderr)

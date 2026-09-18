@@ -2,3 +2,5 @@
 .DS_Store
 # python temp
 __pycache__
+# pipeline run output directories
+data.*/
