@@ -166,7 +166,7 @@ class ResolvedTerm(BaseModel):
     label: str
     role: Literal["primary", "secondary", "alternate"]
     confidence: Literal["low", "medium", "high"]
-    rag_score: float = Field(ge=0.0, le=1.0)
+    rag_score: float = Field(ge=0.0, le=1.001)  # slightly above 1.0 for float imprecision
 
 
 class ResolveOutput(BaseModel):
