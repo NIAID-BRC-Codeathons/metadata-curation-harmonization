@@ -161,6 +161,116 @@ class ExplorerTest(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_comment_save_export_clear_and_persistence(self):
+        url = self.seed()
+        endpoint = url + "/records/2/comment"
+        comment = 'Review this row\nUnicode: café 🧬 <script>alert(1)</script>'
+        response = self.client.post(endpoint, data={"csrf": self.csrf, "comment": comment}, headers={"Accept": "application/json"})
+        self.assertEqual(response.json, {"saved": True})
+        # Reinitializing an existing database preserves records and annotations.
+        database.initialize(self.path)
+        page = self.client.get(url).data
+        self.assertIn(b'&lt;script&gt;', page)
+        self.assertNotIn(b'<script>alert(1)</script>', page)
+        self.assertIn(b'caf', self.client.get(url + "/records/2").data)
+        rows = self.exported(url, {"sort": "/score", "direction": "desc", "col": "/name", "page": 99})
+        self.assertEqual([row["score"] for row in rows], [100, 10, 2])
+        self.assertEqual(rows[1]["comments"], comment)
+        self.assertNotIn("comments", rows[0])
+        self.assertEqual(self.exported(url, {"q": "beta"})[0]["comments"], comment)
+        self.assertEqual(self.client.get(url + "/records/2/download").json["comments"], comment)
+        response = self.client.post(endpoint + "?q=beta", data={"csrf": self.csrf, "comment": ""})
+        self.assertEqual(response.status_code, 303)
+        self.assertTrue(response.location.endswith("?q=beta"))
+        self.assertNotIn("comments", self.exported(url, {"q": "beta"})[0])
+
+    def test_comments_do_not_overwrite_original_fields(self):
+        original = {"comments": {"nested": "original"}, "comments_2": "also original"}
+        url = self.ingest([original, {"other": 1}]).location
+        for record_id in (1, 2):
+            self.client.post(url + f"/records/{record_id}/comment", data={"csrf": self.csrf, "comment": "annotation"})
+        rows = self.exported(url, {})
+        self.assertEqual(rows[0], {**original, "comments_3": "annotation"})
+        self.assertEqual(rows[1], {"other": 1, "comments_3": "annotation"})
+        self.assertEqual(self.client.get(url + "/records/2/download").json, rows[1])
+
+    def test_existing_database_gains_comment_storage_without_reimport(self):
+        url = self.seed()
+        connection = database.connect(self.path)
+        try:
+            connection.execute("DROP TABLE record_comments")
+            connection.commit()
+        finally:
+            connection.close()
+        database.initialize(self.path)
+        response = self.client.post(url + "/records/1/comment", data={"csrf": self.csrf, "comment": "Added after upgrade"})
+        self.assertEqual(response.status_code, 303)
+        rows = self.exported(url, {})
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]["comments"], "Added after upgrade")
+
+    def test_failed_deletion_rolls_back_records_values_and_comments(self):
+        url = self.seed()
+        self.client.post(url + "/records/1/comment", data={"csrf": self.csrf, "comment": "Keep this"})
+        connection = database.connect(self.path)
+        try:
+            connection.execute("CREATE TRIGGER prevent_delete BEFORE DELETE ON datasets BEGIN SELECT RAISE(ABORT, 'test failure'); END")
+            connection.commit()
+        finally:
+            connection.close()
+        import sqlite3
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.client.post(url + "/delete", data={"csrf": self.csrf, "confirm": "delete"})
+        self.assertEqual(len(self.exported(url, {})), 3)
+        self.assertEqual(self.exported(url, {"q": "alpha"})[0]["comments"], "Keep this")
+
+    def test_comment_validation_and_dataset_isolation(self):
+        first = self.seed()
+        second = self.ingest([{"other": 1}]).location
+        endpoint = first + "/records/1/comment"
+        self.assertEqual(self.client.get(endpoint).status_code, 405)
+        self.assertEqual(self.client.post(endpoint, data={"comment": "no csrf"}).status_code, 400)
+        self.assertEqual(self.client.post(endpoint, data={"csrf": self.csrf, "comment": "x" * 10001}).status_code, 400)
+        self.assertEqual(self.client.post(second + "/records/1/comment", data={"csrf": self.csrf, "comment": "wrong dataset"}).status_code, 404)
+        self.assertNotIn("comments", self.exported(first, {})[0])
+
+    def test_column_selection_can_hide_all_or_show_only_comments(self):
+        url = self.seed()
+        self.assertIn(b'<th>Comments</th>', self.client.get(url).data)
+        page = self.client.get(url + "?columns_set=1").data
+        self.assertNotIn(b'<textarea', page)
+        self.assertNotIn(b'title="Sort by', page)
+        page = self.client.get(url + "?columns_set=1&col=__comments").data
+        self.assertIn(b'<textarea', page)
+        self.assertNotIn(b'title="Sort by', page)
+        page = self.client.get(url + "?col=__comments&col=/name").data
+        self.assertLess(page.index(b'title="Sort by name"'), page.index(b'<th>Comments</th>'))
+        self.assertIn(b'id="deselect-all-columns"', page)
+
+    def test_delete_requires_confirmation_and_removes_only_selected_dataset(self):
+        first = self.seed()
+        second = self.ingest([{"other": 1}]).location
+        self.client.post(first + "/records/1/comment", data={"csrf": self.csrf, "comment": "remove me"})
+        self.client.post(second + "/records/4/comment", data={"csrf": self.csrf, "comment": "keep me"})
+        endpoint = first + "/delete"
+        self.assertEqual(self.client.get(endpoint).status_code, 405)
+        self.assertEqual(self.client.post(endpoint, data={"confirm": "delete"}).status_code, 400)
+        self.assertEqual(self.client.post(endpoint, data={"csrf": self.csrf}).status_code, 400)
+        self.assertEqual(len(self.exported(first, {})), 3)
+        self.assertEqual(self.client.post(endpoint, data={"csrf": self.csrf, "confirm": "delete"}).status_code, 303)
+        self.assertEqual(self.client.get(first).status_code, 404)
+        self.assertEqual(self.exported(second, {}), [{"other": 1, "comments": "keep me"}])
+        connection = database.connect(self.path)
+        try:
+            self.assertEqual(connection.execute("SELECT count(*) FROM record_values").fetchone()[0], 1)
+            self.assertEqual(connection.execute("SELECT count(*) FROM record_comments").fetchone()[0], 1)
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
+        finally:
+            connection.close()
+        self.assertEqual(self.client.post(endpoint, data={"csrf": self.csrf, "confirm": "delete"}).status_code, 404)
+        response = self.client.post(second + "/delete", data={"csrf": self.csrf, "confirm": "delete"}, follow_redirects=True)
+        self.assertIn(b"Import your first dataset", response.data)
+
     def test_invalid_record_limit_is_actionable(self):
         for value in ["0", "-1", "bad", "1.5"]:
             with patch.dict(os.environ, {"EXPLORER_MAX_RECORD_MIB": value}):

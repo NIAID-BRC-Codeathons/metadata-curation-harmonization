@@ -43,6 +43,10 @@ def initialize(path):
                 id INTEGER PRIMARY KEY, dataset_id INTEGER NOT NULL REFERENCES datasets(id),
                 line_number INTEGER NOT NULL, payload TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS record_comments (
+                record_id INTEGER PRIMARY KEY REFERENCES records(id) ON DELETE CASCADE,
+                comment TEXT NOT NULL
+            );
             CREATE INDEX IF NOT EXISTS records_dataset ON records(dataset_id, id);
             CREATE TABLE IF NOT EXISTS record_values (
                 record_id INTEGER NOT NULL REFERENCES records(id),
