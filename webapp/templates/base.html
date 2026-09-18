@@ -4,7 +4,9 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Engine Explorer{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='import.css') }}">
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
 <aside class="sidebar">

@@ -12,6 +12,32 @@ document.querySelectorAll('dialog').forEach(dialog => {
     }
   });
 });
+document.getElementById('select-all-columns')?.addEventListener('click', () => {
+  document.querySelectorAll('#columns-dialog input[name=col]').forEach(checkbox => {
+    checkbox.checked = true;
+  });
+});
+const columnSearch = document.getElementById('column-search');
+const clearColumnSearch = document.getElementById('clear-column-search');
+const columnOptions = document.querySelectorAll('#column-options [data-column-name]');
+columnSearch?.addEventListener('input', () => {
+  clearColumnSearch.hidden = columnSearch.value.length === 0;
+  const query = columnSearch.value.trim().toLowerCase();
+  let matches = 0;
+  columnOptions.forEach(option => {
+    option.hidden = !option.dataset.columnName.toLowerCase().includes(query);
+    if (!option.hidden) matches += 1;
+  });
+  document.getElementById('column-search-empty').hidden = matches > 0;
+});
+clearColumnSearch?.addEventListener('click', () => {
+  columnSearch.value = '';
+  columnSearch.dispatchEvent(new Event('input'));
+  columnSearch.focus();
+});
+columnSearch?.addEventListener('keydown', event => {
+  if (event.key === 'Enter') event.preventDefault();
+});
 const filterPanel = document.getElementById('filter-panel');
 const filterRows = document.getElementById('filter-rows');
 function updateFilter(row) {
@@ -42,6 +68,13 @@ document.getElementById('import-form')?.addEventListener('submit', event => {
   const button = event.target.querySelector('[type=submit]');
   button.disabled = true;
   button.textContent = 'Importing…';
+});
+document.querySelectorAll('.ncbi-import-form').forEach(form => {
+  form.addEventListener('submit', () => {
+    const button = form.querySelector('[type=submit]');
+    button.disabled = true;
+    button.textContent = 'Starting import…';
+  });
 });
 document.querySelectorAll('[data-tab]').forEach(button => {
   button.addEventListener('click', () => {
