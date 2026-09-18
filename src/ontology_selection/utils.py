@@ -120,23 +120,32 @@ def extract_nested_field(data: Dict[str, Any], path: str) -> Any:
 
 def flatten_biosample_attributes(attributes: List[Dict[str, str]]) -> Dict[str, str]:
     """
-    Flatten biosample.attributes array to dictionary.
-    
-    Args:
-        attributes: List of {name, value} dictionaries
-        
-    Returns:
-        Dictionary mapping name to value
-        
-    Example:
-        >>> attrs = [{"name": "strain", "value": "Bmb9393"}, {"name": "host", "value": "Homo sapiens"}]
-        >>> flatten_biosample_attributes(attrs)
-        {"strain": "Bmb9393", "host": "Homo sapiens"}
+    Flatten biosample attributes to a {name: value} dictionary.
+
+    Accepts two formats:
+
+    - **V1:** list of ``{"name": "strain", "value": "Bmb9393"}``
+    - **V2 (attribute_recs):** list of ``{"attribute_name": "strain", "value": "Bmb9393", ...}``
+
+    The V2 ``attribute_recs`` format uses ``attribute_name`` instead of ``name``.
+    Both are normalised to the same output.
     """
     if not attributes:
         return {}
-    
-    return {attr['name']: attr['value'] for attr in attributes if 'name' in attr and 'value' in attr}
+
+    result = {}
+    for attr in attributes:
+        if not isinstance(attr, dict):
+            continue
+        # V1: {"name": ..., "value": ...}
+        name = attr.get('name')
+        # V2: {"attribute_name": ..., "value": ...}
+        if name is None:
+            name = attr.get('attribute_name')
+        value = attr.get('value')
+        if name and value is not None:
+            result[name] = value
+    return result
 
 
 def should_ignore_field(field_path: str, config: dict) -> bool:

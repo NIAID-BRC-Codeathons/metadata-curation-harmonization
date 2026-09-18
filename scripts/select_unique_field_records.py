@@ -138,13 +138,28 @@ def select_unique(input_path: str, output_path: str, fields: list[str]) -> tuple
         for line in f:
             total += 1
             d = json.loads(line)
-            bs = (d.get("biosample") or [{}])[0]
-            bvb = (d.get("bv_brc") or [{}])[0]
-            attrs = {
-                a["name"]: a["value"]
-                for a in bs.get("attributes", [])
-                if "name" in a and "value" in a
-            }
+
+            # V2: biosamples (plural), V1: biosample (singular)
+            bs = (d.get("biosamples") or d.get("biosample") or [{}])[0]
+
+            # V2: bvbrc (dict), V1: bv_brc (list)
+            bvb_raw = d.get("bvbrc") or d.get("bv_brc") or {}
+            bvb = bvb_raw if isinstance(bvb_raw, dict) else (bvb_raw[0] if bvb_raw else {})
+
+            # V2: attribute_recs [{attribute_name, value}], V1: attributes [{name, value}]
+            attr_recs = bs.get("attribute_recs", [])
+            if attr_recs and isinstance(attr_recs[0], dict):
+                attrs = {
+                    a.get("attribute_name", a.get("name", "")): a.get("value", "")
+                    for a in attr_recs
+                    if a.get("attribute_name") or a.get("name")
+                }
+            else:
+                attrs = {
+                    a["name"]: a["value"]
+                    for a in bs.get("attributes", [])
+                    if isinstance(a, dict) and "name" in a and "value" in a
+                }
 
             key = tuple(_extract_field(fld, bs, bvb, attrs) for fld in fields)
             acc = _assembly_accession(d)
