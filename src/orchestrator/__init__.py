@@ -14,6 +14,7 @@ from .config import (
     ConfigError,
     PipelineConfig,
     Stage,
+    conda_executable,
     load_pipeline_config,
 )
 from .runner import StageError, run_pipeline, run_stage
@@ -23,6 +24,7 @@ __all__ = [
     "PipelineConfig",
     "Stage",
     "StageError",
+    "conda_executable",
     "load_pipeline_config",
     "run_pipeline",
     "run_stage",

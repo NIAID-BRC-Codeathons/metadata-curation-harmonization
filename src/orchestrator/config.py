@@ -176,14 +176,47 @@ def _validate(config: PipelineConfig) -> None:
             )
 
 
-def conda_environments() -> set[str] | None:
-    """Names of the available conda environments, or None if conda is unavailable."""
-    if shutil.which("conda") is None:
+def conda_executable(config: PipelineConfig | None = None) -> str:
+    """Return the conda-compatible executable to use for ``conda run``.
+
+    Prefers ``mamba`` when available (faster environment resolution, compatible
+    CLI), falling back to ``conda``.  If ``force_conda`` is set to a truthy
+    value in the pipeline settings, ``conda`` is used unconditionally.
+
+    Arguments:
+        config: Pipeline config.  When supplied, the ``force_conda`` setting
+            is respected.
+
+    Returns:
+        ``"mamba"`` or ``"conda"``.
+
+    Raises:
+        ConfigError: If neither executable is found on PATH.
+    """
+    force = False
+    if config is not None:
+        raw = config.settings.get("force_conda", False)
+        force = str(raw).lower() in ("true", "1", "yes")
+
+    if not force and shutil.which("mamba") is not None:
+        return "mamba"
+    if shutil.which("conda") is not None:
+        return "conda"
+    raise ConfigError(
+        "Neither 'mamba' nor 'conda' found on PATH. Install one of them."
+    )
+
+
+def conda_environments(config: PipelineConfig | None = None) -> set[str] | None:
+    """Names of the available conda/mamba environments, or None if unavailable."""
+    try:
+        exe = conda_executable(config)
+    except ConfigError:
         return None
 
     try:
         result = subprocess.run(
-            ["conda", "env", "list"],
+            [exe, "env", "list"],
             capture_output=True,
             text=True,
             check=True,

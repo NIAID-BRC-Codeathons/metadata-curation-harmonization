@@ -19,7 +19,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .config import PipelineConfig, Stage, conda_environments
+from .config import PipelineConfig, Stage, conda_environments, conda_executable
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class StageError(Exception):
 
 
 def build_argv(stage: Stage, config: PipelineConfig) -> list[str]:
-    """Build the full `conda run` argument vector for a stage.
+    """Build the full ``conda run`` (or ``mamba run``) argument vector for a stage.
 
     Arguments:
         stage (Stage): The stage to run.
@@ -38,8 +38,9 @@ def build_argv(stage: Stage, config: PipelineConfig) -> list[str]:
     Returns:
         (list[str]): Argument vector suitable for subprocess.run(shell=False).
     """
+    exe = conda_executable(config)
     return [
-        "conda",
+        exe,
         "run",
         "-n",
         stage.env,
@@ -139,9 +140,11 @@ def _check_passthrough(config: PipelineConfig) -> None:
         )
 
 
-def _check_environments(stages: list[Stage], dry_run: bool) -> None:
+def _check_environments(
+    stages: list[Stage], config: PipelineConfig, dry_run: bool
+) -> None:
     """Fail before any stage starts if a selected stage's conda env is missing."""
-    available = conda_environments()
+    available = conda_environments(config)
     if available is None:
         return
 
@@ -167,7 +170,7 @@ def run_pipeline(
     running a single stage against missing intermediates fails immediately with a
     message naming the file rather than inside the stage's own code.
     """
-    _check_environments(stages, dry_run)
+    _check_environments(stages, config, dry_run)
     _check_passthrough(config)
 
     produced: set[str] = set()

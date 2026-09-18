@@ -22,6 +22,7 @@ artifacts:
 
 # Shared knobs. Stage commands reference these by name too.
 settings:
+  force_conda: false     # set true to use conda even when mamba is available
   top_k: 10
   metric: cosine
   device: cpu
