@@ -84,8 +84,19 @@ class PlanAgent:
         Returns:
             PlanOutput with ontology mappings and flags
         """
-        # Format metadata for prompt
-        metadata_dict = record.model_dump(exclude={'record_id', 'comments', 'extras'}, exclude_none=True)
+        # Build metadata dict for the LLM.
+        # Include comments (may contain useful free text like "from a throat swab").
+        # Exclude extras (raw nested objects) but surface extras.biosample_attrs
+        # so the LLM can see all biosample attributes, including ones we didn't
+        # map to named RecordInput fields.
+        metadata_dict = record.model_dump(exclude={'record_id', 'extras'}, exclude_none=True)
+
+        # Surface the full set of biosample attributes under "biosample_attributes"
+        # so the LLM sees field names we may not have normalised.
+        biosample_attrs = (record.extras or {}).get('biosample_attrs') or {}
+        if biosample_attrs:
+            metadata_dict['biosample_attributes'] = biosample_attrs
+
         metadata_str = format_metadata_for_prompt(metadata_dict)
         
         try:
@@ -132,55 +143,99 @@ class PlanAgent:
     def _fallback_plan(self, record: RecordInput, error: str) -> PlanOutput:
         """
         Create a safe fallback plan when LLM fails.
-        
-        Uses simple heuristics to avoid complete failure.
-        
-        Args:
-            record: Input record
-            error: Error description
-            
-        Returns:
-            PlanOutput with basic mappings based on heuristics
+
+        Scans all available fields — isolation_source, body_sample_site,
+        tissue, disease, environment, note, comments — and builds mappings
+        from any that carry useful text.
         """
         mappings = []
         flags = [f"plan_agent_error: {error}"]
-        
-        # Simple heuristic: if isolation_source exists, map to UBERON
-        if record.isolation_source and record.isolation_source.strip():
-            iso_src = record.isolation_source.strip().lower()
-            
-            # Skip if it looks like a host species
-            if any(species in iso_src for species in ['homo sapiens', 'mus musculus', 'human', 'mouse']):
+
+        host_terms = {'homo sapiens', 'mus musculus', 'human', 'mouse'}
+        clinical_terms = {'infection', 'disease', 'patient', 'clinical',
+                          'sepsis', 'pneumonia', 'abscess', 'wound'}
+
+        def _add(ontology: str, field_name: str, value: str):
+            """Append a mapping if value is non-empty and not a host species."""
+            v = value.strip()
+            if not v:
+                return
+            if v.lower() in host_terms:
                 flags.append("looks_like_host")
-            else:
-                mappings.append(PlanMapping(
-                    ontology="UBERON",
-                    src_fields=[SourceField(
-                        path="bvbrc.isolation_source",
-                        name="isolation_source",
-                        value=record.isolation_source
-                    )],
-                    query_texts=[record.isolation_source]
-                ))
-        
-        # If note exists and mentions clinical terms, map to MONDO
-        if record.note and record.note.strip():
-            note_lower = record.note.lower()
-            if any(term in note_lower for term in ['infection', 'disease', 'patient', 'clinical', 'sepsis']):
-                mappings.append(PlanMapping(
-                    ontology="MONDO",
-                    src_fields=[SourceField(
-                        path="biosample.attributes.note",
-                        name="note",
-                        value=record.note
-                    )],
-                    query_texts=[record.note]
-                ))
-        
+                return
+            mappings.append(PlanMapping(
+                ontology=ontology,
+                src_fields=[SourceField(
+                    path=f"biosample.{field_name}",
+                    name=field_name,
+                    value=v,
+                )],
+                query_texts=[v],
+            ))
+
+        # Anatomy / specimen source → UBERON
+        for field in ('isolation_source', 'body_sample_site', 'tissue'):
+            val = getattr(record, field, None)
+            if val:
+                _add("UBERON", field, val)
+
+        # Disease / clinical → MONDO
+        if record.disease:
+            _add("MONDO", "disease", record.disease)
+
+        # Environment → ENVO
+        if record.environment:
+            _add("ENVO", "environment", record.environment)
+
+        # Free text fields — scan for clinical or anatomical hints
+        for field in ('note', 'biosample_description', 'bioproject_title'):
+            val = getattr(record, field, None)
+            if not val:
+                continue
+            val_lower = val.lower()
+            if any(t in val_lower for t in clinical_terms):
+                _add("MONDO", field, val)
+            # Also check for body-part language
+            if any(t in val_lower for t in ('blood', 'wound', 'throat', 'nasal',
+                                            'swab', 'skin', 'lung', 'tissue',
+                                            'sputum', 'urine', 'stool')):
+                _add("UBERON", field, val)
+
+        # Comments (list of strings)
+        for i, comment in enumerate(record.comments or []):
+            if not comment:
+                continue
+            c_lower = comment.lower()
+            if any(t in c_lower for t in clinical_terms):
+                _add("MONDO", f"comments[{i}]", comment)
+            if any(t in c_lower for t in ('blood', 'wound', 'throat', 'nasal',
+                                          'swab', 'skin', 'lung', 'tissue')):
+                _add("UBERON", f"comments[{i}]", comment)
+
+        # Check biosample_attrs for fields we may have missed
+        biosample_attrs = (record.extras or {}).get('biosample_attrs') or {}
+        for attr_name, attr_val in biosample_attrs.items():
+            if not attr_val or not isinstance(attr_val, str):
+                continue
+            # Already covered by named fields above
+            if attr_name in ('isolation_source', 'host', 'strain',
+                             'geo_loc_name', 'collection_date'):
+                continue
+            attr_lower = attr_val.lower()
+            if any(t in attr_lower for t in ('blood', 'wound', 'throat', 'nasal',
+                                             'swab', 'skin', 'lung', 'tissue',
+                                             'sputum', 'urine')):
+                _add("UBERON", f"biosample.{attr_name}", attr_val)
+            if any(t in attr_lower for t in clinical_terms):
+                _add("MONDO", f"biosample.{attr_name}", attr_val)
+
+        if not mappings:
+            flags.append("empty_record")
+
         return PlanOutput(
             record_id=record.record_id,
             mappings=mappings,
-            flags=flags
+            flags=flags,
         )
     
     def plan_batch(self, records: list[RecordInput]) -> list[PlanOutput]:

@@ -146,13 +146,14 @@ def select_unique(input_path: str, output_path: str, fields: list[str]) -> tuple
             bvb_raw = d.get("bvbrc") or d.get("bv_brc") or {}
             bvb = bvb_raw if isinstance(bvb_raw, dict) else (bvb_raw[0] if bvb_raw else {})
 
-            # V2: attribute_recs [{attribute_name, value}], V1: attributes [{name, value}]
+            # V2: attribute_recs [{attribute_name, harmonized_name, value}]
+            # Key by harmonized_name (stable, normalised) when available.
             attr_recs = bs.get("attribute_recs", [])
             if attr_recs and isinstance(attr_recs[0], dict):
                 attrs = {
-                    a.get("attribute_name", a.get("name", "")): a.get("value", "")
+                    (a.get("harmonized_name") or a.get("attribute_name") or ""): a.get("value", "")
                     for a in attr_recs
-                    if a.get("attribute_name") or a.get("name")
+                    if (a.get("harmonized_name") or a.get("attribute_name"))
                 }
             else:
                 attrs = {

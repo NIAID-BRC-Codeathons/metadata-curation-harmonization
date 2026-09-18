@@ -1,19 +1,16 @@
 """
-Data ingestion: Convert raw BV-BRC/NCBI JSON to normalized RecordInput format.
+Data ingestion: Convert raw combined.v2.jsonl records to normalised RecordInput.
 
-Four input shapes are accepted, detected per line:
+Only the **V2 combined** format is supported.  V2 is detected by the presence
+of ``genome.genome_id`` in the first record.  Other formats raise ``ValueError``.
 
-- **Combined V2** (``combined.v2.jsonl``): detected by ``genome.genome_id``.
-  Top-level keys: ``genome``, ``biosamples`` (plural, list), ``bioprojects``
-  (plural, list), ``bvbrc`` (dict, no underscore).  Biosample attributes live
-  in ``attribute_recs`` with key ``attribute_name``.
-- **Combined V1** (``combined.jsonl``): detected by ``genome`` + ``biosample``
-  (singular, list).  Top-level keys: ``genome``, ``biosample`` (list),
-  ``bioproject`` (list), ``bv_brc`` (optional list).
-- **Flat engine rows** (engine.md section 6.1): already carrying ``record_id``
-  and the searchable fields at the top level.
-- **Legacy** (``sample.input.jsonl``): single top-level ``genomes`` dict whose
-  ``assemblyInfo.biosample`` contains the biosample data.
+V2 top-level keys::
+
+    genome      (dict)   — assembly metadata; ``currentAccession`` is the record ID.
+    biosamples  (list)   — biosample records; attributes in ``attribute_recs``.
+    bioprojects (list)   — bioproject records.
+    bvbrc       (dict)   — BV-BRC enriched fields (isolation_source, host_name, …).
+    sra_experiments, sra_runs, matched_by — ignored.
 """
 
 from typing import Any, Dict, List, Optional, Set
@@ -65,101 +62,42 @@ def _coalesce(*values: Any) -> Optional[str]:
 # Format detection
 # ---------------------------------------------------------------------------
 
-# String labels returned by detect_format() and logged at ingest time.
 FORMAT_COMBINED_V2 = "combined_v2"
-FORMAT_COMBINED_V1 = "combined_v1"
-FORMAT_ENGINE_ROW = "engine_row"
-FORMAT_LEGACY = "legacy"
 
 
 def detect_format(raw: Dict[str, Any]) -> Optional[str]:
-    """Return a format label for the record, or None if unrecognised.
-
-    Detection order (first match wins):
-
-    1. **Combined V2** — ``genome.genome_id`` exists (V2 added this field).
-    2. **Combined V1** — ``genome`` + ``biosample`` (singular, list).
-    3. **Engine row** — ``record_id`` at top level.
-    4. **Legacy** — ``genomes`` at top level.
-    """
+    """Return ``'combined_v2'`` if the record has ``genome.genome_id``, else None."""
     genome = raw.get('genome')
     if isinstance(genome, dict) and 'genome_id' in genome:
         return FORMAT_COMBINED_V2
-    if isinstance(genome, dict) and (
-        isinstance(raw.get('biosample'), list)
-        or isinstance(raw.get('biosamples'), list)
-    ):
-        return FORMAT_COMBINED_V1
-    if 'record_id' in raw:
-        return FORMAT_ENGINE_ROW
-    if 'genomes' in raw:
-        return FORMAT_LEGACY
     return None
 
 
 # ---------------------------------------------------------------------------
-# Normalizers
+# V2 normaliser
 # ---------------------------------------------------------------------------
 
-def _get_bvbrc(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract the BV-BRC record, handling both V1 (list) and V2 (dict)."""
-    # V2: bvbrc is a dict
-    bvb = raw.get('bvbrc')
-    if isinstance(bvb, dict):
-        return bvb
-    # V1: bv_brc is a list
-    return _first_or_none(raw.get('bv_brc')) or {}
+def normalize_record(raw: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
+    """Normalise a single V2 combined.jsonl record to :class:`RecordInput`.
 
-
-def _get_biosample(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract the first biosample, handling both V1 and V2 key names."""
-    # V2: biosamples (plural)
-    bs = _first_or_none(raw.get('biosamples'))
-    if bs is not None:
-        return bs
-    # V1: biosample (singular)
-    return _first_or_none(raw.get('biosample')) or {}
-
-
-def _get_bioproject(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract the first bioproject, handling both V1 and V2 key names."""
-    bp = _first_or_none(raw.get('bioprojects'))
-    if bp is not None:
-        return bp
-    return _first_or_none(raw.get('bioproject')) or {}
-
-
-def _get_biosample_attrs(bs: Dict[str, Any]) -> Dict[str, str]:
-    """Flatten biosample attributes from either V1 or V2 format.
-
-    V1 stores ``[{name, value}]`` in ``attributes``.
-    V2 stores ``[{attribute_name, value, ...}]`` in ``attribute_recs``
-    (``attributes`` is just a list of name strings).
+    Raises ``ValueError`` if the record is not V2 format.
     """
-    # V2: attribute_recs has the actual name/value pairs
-    attr_recs = bs.get('attribute_recs')
-    if isinstance(attr_recs, list) and attr_recs:
-        return flatten_biosample_attributes(attr_recs)
-    # V1: attributes is [{name, value}]
-    return flatten_biosample_attributes(bs.get('attributes', []))
+    if detect_format(raw) != FORMAT_COMBINED_V2:
+        raise ValueError(
+            f"Expected combined_v2 format (genome.genome_id present). "
+            f"Top-level keys: {list(raw.keys())}"
+        )
 
+    bs = _first_or_none(raw.get('biosamples')) or {}
+    bp = _first_or_none(raw.get('bioprojects')) or {}
+    bvb = raw.get('bvbrc') or {}
+    if not isinstance(bvb, dict):
+        bvb = {}
 
-def normalize_combined_record(raw: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
-    """Normalize a record in combined V1 or V2 layout.
+    # Flatten attribute_recs (keyed by harmonized_name via utils)
+    attrs = flatten_biosample_attributes(bs.get('attribute_recs', []))
 
-    V1 keys: ``genome``, ``biosample`` (list), ``bioproject`` (list),
-    ``bv_brc`` (optional list).
-
-    V2 keys: ``genome``, ``biosamples`` (list), ``bioprojects`` (list),
-    ``bvbrc`` (dict).  Biosample attributes in ``attribute_recs``.
-    """
-    bs = _get_biosample(raw)
-    bp = _get_bioproject(raw)
-    bvb = _get_bvbrc(raw)
-    attrs = _get_biosample_attrs(bs)
-
-    # Record ID: prefer genome.currentAccession (the stable assembly
-    # accession), then genome.accession, then biosample accession.
+    # Record ID: genome.currentAccession (stable assembly accession)
     record_id = _coalesce(
         extract_nested_field(raw, 'genome.currentAccession'),
         extract_nested_field(raw, 'genome.accession'),
@@ -167,74 +105,93 @@ def normalize_combined_record(raw: Dict[str, Any], config: Dict[str, Any]) -> Re
         bvb.get('genome_id'),
     ) or f"unknown_{hash(json.dumps(raw, sort_keys=True, default=str)) % 1_000_000}"
 
+    # Build comments from bvbrc.comments (can be a list of strings)
+    comments_raw = bvb.get('comments') or []
+    if isinstance(comments_raw, str):
+        comments_raw = [comments_raw]
+    comments = [str(c) for c in comments_raw if c]
+
     return RecordInput(
         record_id=record_id,
 
-        # Isolation / anatomy
+        # Isolation / anatomy — check bvbrc, then biosample attrs, then
+        # biosample direct fields (V2 sometimes has isolationSource).
         isolation_source=_coalesce(
             bvb.get('isolation_source'),
             attrs.get('isolation_source'),
-            attrs.get('isolation source'),
+            bs.get('isolationSource'),
         ),
         body_sample_site=_coalesce(
             bvb.get('body_sample_site'),
             attrs.get('body_sample_site'),
-            attrs.get('body sample site'),
         ),
-        tissue=_coalesce(attrs.get('tissue')),
+        tissue=_coalesce(
+            attrs.get('tissue'),
+            attrs.get('tissue_type'),
+        ),
 
         # Host
         host=_coalesce(
-            bs.get('host'),
-            bvb.get('host_name'),
             attrs.get('host'),
+            bvb.get('host_name'),
+            bs.get('host'),
         ),
 
         # Disease / clinical
         disease=_coalesce(
+            attrs.get('host_disease'),
             bvb.get('disease'),
             attrs.get('disease'),
-            attrs.get('host_disease'),
         ),
-        note=_coalesce(attrs.get('note')),
+        note=_coalesce(
+            attrs.get('note'),
+            attrs.get('description'),
+            attrs.get('sample_type'),
+        ),
 
         # Environment
         environment=_coalesce(
             attrs.get('env_medium'),
+            attrs.get('env_broad_scale'),
+            attrs.get('env_local_scale'),
             attrs.get('environment'),
         ),
 
         # Geography / date
         geo_loc_name=_coalesce(
-            bs.get('geoLocName'),
-            bvb.get('geographic_location'),
             attrs.get('geo_loc_name'),
+            bvb.get('geographic_location'),
+            bs.get('geoLocName'),
         ),
         collection_date=_coalesce(
-            bs.get('collectionDate'),
-            bvb.get('collection_date'),
             attrs.get('collection_date'),
+            bvb.get('collection_date'),
+            bs.get('collectionDate'),
         ),
 
         # Strain
         strain=_coalesce(
-            bs.get('strain'),
-            bvb.get('strain'),
             attrs.get('strain'),
+            bvb.get('strain'),
+            bs.get('strain'),
         ),
 
         # Descriptions / titles
         biosample_description=_coalesce(
-            extract_nested_field(bs, 'description.title'),
             bs.get('title'),
+            extract_nested_field(bs, 'description.title'),
         ),
         bioproject_title=_coalesce(bp.get('title')),
 
-        # Extras — lightweight references only
+        # Comments (from bvbrc)
+        comments=comments,
+
+        # Extras — the full flattened attribute dict so the Plan agent
+        # can see *every* biosample attribute, including ones we didn't
+        # map to a named RecordInput field.
         extras={
             'biosample_accession': bs.get('accession'),
-            'bioproject_accession': extract_nested_field(
-                raw, 'genome.assemblyInfo.bioprojectAccession'),
+            'bioproject_accession': bp.get('accession'),
             'genome_accession': extract_nested_field(raw, 'genome.accession'),
             'bvbrc_genome_id': bvb.get('genome_id'),
             'biosample_attrs': attrs,
@@ -242,109 +199,9 @@ def normalize_combined_record(raw: Dict[str, Any], config: Dict[str, Any]) -> Re
     )
 
 
-def normalize_engine_row(raw_data: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
-    """
-    Convert a flat engine row (engine.md section 6.1) to RecordInput.
-
-    These rows are already normalized - record_id and the searchable fields sit at
-    the top level - but the richer metadata stays in extras.attributes. Fields the
-    Plan agent can use are lifted out of there when the top level leaves them unset.
-    """
-    extras = raw_data.get('extras') or {}
-    attrs = extras.get('attributes') or {}
-
-    def pick(*keys):
-        """First non-empty attribute value among keys."""
-        for key in keys:
-            value = attrs.get(key)
-            if value:
-                return value
-        return None
-
-    return RecordInput(
-        record_id=raw_data['record_id'],
-        isolation_source=raw_data.get('isolation_source') or pick('isolation_source'),
-        body_sample_site=raw_data.get('body_sample_site') or pick('body_sample_site'),
-        host=raw_data.get('host') or pick('host'),
-        note=raw_data.get('note') or pick('note'),
-        disease=raw_data.get('disease') or pick('host_disease', 'disease'),
-        tissue=raw_data.get('tissue') or pick('tissue'),
-        environment=raw_data.get('environment') or pick('env_medium', 'environment'),
-        strain=raw_data.get('strain') or pick('strain'),
-        geo_loc_name=raw_data.get('geo_loc_name') or pick('geo_loc_name'),
-        collection_date=raw_data.get('collection_date') or pick('collection_date'),
-        biosample_description=extras.get('title'),
-        comments=list(raw_data.get('comments') or []),
-        extras=extras,
-    )
-
-
-def normalize_bvbrc_record(raw_data: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
-    """Normalize a record in the legacy ``sample.input.jsonl`` layout.
-
-    Single top-level key ``genomes`` containing
-    ``assemblyInfo.biosample``.
-    """
-    biosample = extract_nested_field(raw_data, "genomes.assemblyInfo.biosample") or {}
-
-    record_id = _coalesce(
-        biosample.get('accession'),
-        extract_nested_field(raw_data, "genomes.assemblyInfo.bioprojectAccession"),
-    ) or f"unknown_{hash(json.dumps(raw_data, sort_keys=True, default=str)) % 1_000_000}"
-
-    attrs = flatten_biosample_attributes(biosample.get('attributes', []))
-
-    return RecordInput(
-        record_id=record_id,
-        isolation_source=_coalesce(
-            attrs.get('isolation_source'), attrs.get('isolation source')),
-        body_sample_site=_coalesce(
-            attrs.get('body_sample_site'), attrs.get('body sample site')),
-        note=_coalesce(attrs.get('note')),
-        strain=_coalesce(attrs.get('strain')),
-        disease=_coalesce(attrs.get('disease')),
-        tissue=_coalesce(attrs.get('tissue')),
-        environment=_coalesce(
-            attrs.get('env_medium'), attrs.get('environment')),
-        collection_date=_coalesce(
-            attrs.get('collection_date'), biosample.get('collectionDate')),
-        host=_coalesce(biosample.get('host')),
-        geo_loc_name=_coalesce(
-            biosample.get('geoLocName'), attrs.get('geo_loc_name')),
-        biosample_description=_coalesce(
-            extract_nested_field(raw_data, "genomes.assemblyInfo.biosample.description.title")),
-        bioproject_title=_coalesce(
-            extract_nested_field(raw_data, "genomes.assemblyInfo.bioprojectLineage.0.bioprojects.0.title")),
-        extras={
-            'biosample_attrs': attrs,
-            'bioproject_accession': extract_nested_field(
-                raw_data, "genomes.assemblyInfo.bioprojectAccession"),
-        },
-    )
-
-
-def normalize_record(raw_data: Dict[str, Any], config: Dict[str, Any]) -> RecordInput:
-    """Auto-detect format and normalize a single raw JSON record.
-
-    Detection order (first match wins):
-
-    1. **Combined V2** — ``genome.genome_id`` exists.
-    2. **Combined V1** — ``genome`` + ``biosample``/``biosamples`` (list).
-    3. **Engine row** — ``record_id`` at top level (pre-flattened).
-    4. **Legacy** — ``genomes`` at top level (old sample.input.jsonl).
-
-    Raises ``ValueError`` if the layout is unrecognised.
-    """
-    fmt = detect_format(raw_data)
-    if fmt in (FORMAT_COMBINED_V2, FORMAT_COMBINED_V1):
-        return normalize_combined_record(raw_data, config)
-    if fmt == FORMAT_ENGINE_ROW:
-        return normalize_engine_row(raw_data, config)
-    if fmt == FORMAT_LEGACY:
-        return normalize_bvbrc_record(raw_data, config)
-    raise ValueError(
-        f"Unrecognised record layout. Top-level keys: {list(raw_data.keys())}"
-    )
+# Keep old name as alias.
+normalize_bvbrc_record = normalize_record
+normalize_combined_record = normalize_record
 
 
 # ---------------------------------------------------------------------------
@@ -357,20 +214,21 @@ def ingest_jsonl(
     limit: int = None,
     ids: Optional[Set[str]] = None,
 ) -> List[RecordInput]:
-    """Load and normalize records from a JSONL (or ``.jsonl.gz``) file.
+    """Load and normalise records from a JSONL (or ``.jsonl.gz``) file.
+
+    Only V2 combined format is accepted.
 
     Args:
         filepath: Path to input JSONL / JSONL.GZ file.
         config:   Configuration dictionary.
         limit:    Maximum number of *emitted* records (after ID filtering).
-        ids:      Optional set of record IDs to keep.  If given, records
-                  whose ``record_id`` is not in this set are skipped.
+        ids:      Optional set of record IDs to keep.
 
     Returns:
         List of normalised RecordInput objects.
     """
     records: List[RecordInput] = []
-    detected_format: Optional[str] = None
+    format_logged = False
 
     opener = gzip.open if filepath.endswith('.gz') else open
     with opener(filepath, 'rt', encoding='utf-8') as f:  # type: ignore[call-overload]
@@ -386,12 +244,19 @@ def ingest_jsonl(
                 raw_data = json.loads(line)
 
                 # Log the detected format once, from the first record.
-                if detected_format is None:
-                    detected_format = detect_format(raw_data) or "unknown"
+                if not format_logged:
+                    fmt = detect_format(raw_data)
+                    if fmt != FORMAT_COMBINED_V2:
+                        raise ValueError(
+                            f"Expected combined_v2 format but detected "
+                            f"'{fmt or 'unknown'}' in {filepath}. "
+                            f"First record top-level keys: {list(raw_data.keys())}"
+                        )
                     logger.info(
                         "Input format detected: %s (from %s)",
-                        detected_format, filepath,
+                        FORMAT_COMBINED_V2, filepath,
                     )
+                    format_logged = True
 
                 record = normalize_record(raw_data, config)
 
@@ -402,6 +267,9 @@ def ingest_jsonl(
 
             except Exception as e:
                 logger.error(f"Failed to parse line {lineno}: {e}")
+                if not format_logged:
+                    # Format error on line 1 is fatal — don't silently skip.
+                    raise
                 continue
 
     logger.info(f"Ingested {len(records)} records from {filepath}")
@@ -411,9 +279,6 @@ def ingest_jsonl(
 def create_test_records() -> List[RecordInput]:
     """
     Create a few handcrafted test records for development.
-    
-    Returns:
-        List of test RecordInput objects
     """
     return [
         RecordInput(
@@ -445,7 +310,7 @@ def create_test_records() -> List[RecordInput]:
         ),
         RecordInput(
             record_id="TEST005",
-            isolation_source="Homo sapiens",  # This should trigger "looks_like_host" flag
+            isolation_source="Homo sapiens",
             host="Homo sapiens"
         ),
     ]
