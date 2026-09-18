@@ -21,9 +21,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 GOLD_STD = REPO_ROOT / "data" / "inputs" / "Clays_test" / "onto_gold_std.csv"
 
 # a .json / .jsonl path, or a list of records in the shape of test_records
-RESULTS = test_records
+RESULTS = r"C:\Users\Clayg\OneDrive\Desktop\RaviLab\Codeathon\metadata-curation-harmonization\data\out\proposals.jsonl"
 
-RUN_ID = "demo"
+RUN_ID = "two_hundred_first_run"
 
 # a directory (the file lands at <OUTPUT_PATH>/<RUN_ID>.jsonl) or a full file name
 OUTPUT_PATH = REPO_ROOT / "data" / "out" / "evaluation"
