@@ -1,5 +1,6 @@
 """Dataset-scoped result reports with exact record/run matching."""
 import json
+import hashlib
 from datetime import datetime, timezone
 
 from flask import abort
@@ -7,6 +8,16 @@ import database
 
 MAX_REPORT_LINE = 1024 * 1024
 MAX_REPORT_ROWS = 100000
+
+
+def fingerprint(obj):
+    # Key order and JSON whitespace do not make a new result; every value does.
+    canonical = json.dumps(obj, sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+DISTINCT_ENTRY = "NOT EXISTS (SELECT 1 FROM report_entries duplicate WHERE duplicate.report_id=e.report_id AND duplicate.content_hash=e.content_hash AND duplicate.id<e.id)"
+
 
 
 def initialize(db):
@@ -33,6 +44,14 @@ def initialize(db):
         );
         CREATE INDEX IF NOT EXISTS matches_record ON report_matches(record_id,entry_id);
     """)
+
+    # Upgrade existing attachments in place; retain every uploaded source line.
+    columns = {row['name'] for row in db.execute('PRAGMA table_info(report_entries)')}
+    if 'content_hash' not in columns:
+        db.execute('ALTER TABLE report_entries ADD COLUMN content_hash TEXT')
+    for row in db.execute('SELECT id,payload FROM report_entries WHERE content_hash IS NULL'):
+        db.execute('UPDATE report_entries SET content_hash=? WHERE id=?', (fingerprint(json.loads(row['payload'])),row['id']))
+    db.execute('CREATE INDEX IF NOT EXISTS entries_content ON report_entries(report_id,content_hash,id)')
 
 
 def scalar_fields(fields):
@@ -72,8 +91,8 @@ def import_report(db, dataset_id, fields, stream, name, source, record_field, ru
                 count += 1
                 if count > MAX_REPORT_ROWS:
                     raise database.DataError('A report may contain at most 100,000 entries.')
-                db.execute('INSERT INTO report_entries(report_id,line_number,record_key,run_key,payload) VALUES (?,?,?,?,?)',
-                           (report_id, line_number, obj['record_id'], obj['run_id'], json.dumps(obj, ensure_ascii=False, allow_nan=False)))
+                db.execute('INSERT INTO report_entries(report_id,line_number,record_key,run_key,payload,content_hash) VALUES (?,?,?,?,?,?)',
+                           (report_id, line_number, obj['record_id'], obj['run_id'], json.dumps(obj, ensure_ascii=False, allow_nan=False), fingerprint(obj)))
             except (ValueError, UnicodeError, RecursionError) as error:
                 raise database.DataError(f'Report line {line_number}: {error}') from error
         if not count:
@@ -112,8 +131,8 @@ def selection(db, dataset_id, args):
     if report_id is not None:
         get_report(db, dataset_id, report_id)
     scope = args.get('report_scope', 'matched' if report_id is not None else 'all')
-    if scope not in {'all', 'matched', 'unmatched'}:
-        raise database.DataError('Choose all rows, matched rows, or unmatched rows.')
+    if scope not in {'all', 'matched', 'matched_records', 'unmatched'}:
+        raise database.DataError('Choose all rows, matched report results, matched dataset rows, or unmatched rows.')
     return {'id': report_id, 'scope': scope, 'run': args.get('report_run', '')}
 
 
@@ -160,3 +179,30 @@ def record_results(db, dataset_id, record_id, args):
         items.append(item)
     total = db.execute('SELECT count(*) FROM report_matches WHERE record_id=?', (record_id,)).fetchone()[0]
     return {'items': items, 'count': count, 'total': total, 'page': page, 'pages': pages, 'selection': state}
+
+
+def matched_query(state, where, params):
+    """One row per distinct report entry and matching source record."""
+    source = ('records r JOIN report_matches m ON m.record_id=r.id '
+              'JOIN report_entries e ON e.id=m.entry_id '
+              'JOIN result_reports a ON a.id=e.report_id '
+              'LEFT JOIN record_comments c ON c.record_id=r.id')
+    params = list(params)
+    if state['id'] is not None:
+        where += ' AND e.report_id=?'
+        params.append(state['id'])
+    if state['run']:
+        where += ' AND e.run_key=?'
+        params.append(state['run'])
+    where += ' AND ' + DISTINCT_ENTRY
+    return source, where, params
+
+
+MATCHED_COLUMNS = ('r.*,c.comment,e.id AS report_entry_id,e.report_id,e.line_number AS report_line,'
+                   'e.payload AS report_payload,e.run_key,a.name AS report_name')
+
+
+def matched_export(row, dataset_record):
+    return {'dataset_record_id':row['id'], 'dataset_record':dataset_record,
+            'report_id':row['report_id'], 'report_line':row['report_line'],
+            'result_report':json.loads(row['report_payload'])}

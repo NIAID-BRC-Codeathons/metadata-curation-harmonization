@@ -123,6 +123,9 @@ document.querySelectorAll('.comment-form').forEach(form => {
       const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } });
       if (!response.ok || !(await response.json()).saved) throw new Error('Save failed');
       savedValue = value;
+      document.querySelectorAll('[data-record-comment-id]').forEach(copy => {
+        if (copy.dataset.recordCommentId === form.dataset.recordId) copy.textContent = value;
+      });
       if (input.value === savedValue) dirtyComments.delete(form);
       else dirtyComments.add(form);
       status.textContent = dirtyComments.has(form) ? 'Unsaved changes' : 'Saved';
