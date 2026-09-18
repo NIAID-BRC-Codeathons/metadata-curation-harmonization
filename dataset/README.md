@@ -41,17 +41,37 @@ All of NCBI Genome, with bv-brc and SRA and BioProject/Sample records included, 
 ## Makefile — derived datasets
 
 Run `make` in this directory to download, decompress, and build all derived
-datasets. Targets:
+datasets. The combined dataset has two versions, stored in `v1/` and `v2/`
+subdirectories:
+
+- **v1** — original combined.jsonl from `.baby/datafiles/.argonne/`
+- **v2** — combined.v2.jsonl from `pub/datasets/.argonne/`
+
+```bash
+make          # build both v1 and v2
+make v1       # build only v1
+make v2       # build only v2
+make download # download both without processing
+```
+
+### Shared files (version-independent)
 
 | File | Records | Description |
 |------|---------|-------------|
-| `combined.jsonl.gz` | 158,339 | Downloaded from NCBI FTP |
-| `combined.jsonl` | 158,339 | Uncompressed copy |
 | `curated_assembly_accessions.tsv` | 3,078 | Assembly accessions extracted from `curated_metadata_expanded.json` via `jq` |
 | `curated_assembly_accessions.uniq.tsv` | 2,634 | Deduplicated assembly accessions (sorted, unique) |
+
+### Per-version files (in `v1/` and `v2/`)
+
+| File | v1 records | Description |
+|------|------------|-------------|
+| `combined.jsonl.gz` | 158,339 | Downloaded from NCBI FTP |
+| `combined.jsonl` | 158,339 | Uncompressed copy |
 | `curated_combined.jsonl` | ~5,211 | Filtered to assembly accessions present in `curated_metadata_expanded.json` |
 | `curated_combined.head10.jsonl` | 10 | First 10 records from the curated subset (quick smoke tests) |
 | `curated_combined.unique_isolation_host.jsonl` | ~309 | One record per unique `(isolation_source, host)` pair; ties broken by alphabetically-first assembly accession |
+
+### Scripts
 
 Scripts used by the Makefile live in `../scripts/`:
 
