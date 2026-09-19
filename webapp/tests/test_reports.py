@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,7 +57,10 @@ class ReportTest(unittest.TestCase):
         page=self.client.get(response.location)
         self.assertEqual(page.status_code,200)
         self.assertEqual(self.counts(),[1,4,3,4])
-        self.assertEqual(self.exported(report_id=1,report_scope='matched'),self.rows[:1])
+        matched = self.exported(report_id=1,report_scope='matched')
+        self.assertEqual([row['result_report'] for row in matched],self.entries[:3])
+        self.assertEqual([row['dataset_record'] for row in matched],[self.rows[0]]*3)
+        self.assertEqual(self.exported(report_id=1,report_scope='matched_records'),self.rows[:1])
         self.assertEqual(self.exported(report_id=1,report_scope='unmatched'),self.rows[1:])
         self.assertEqual(self.exported(report_id=1,report_scope='all'),self.rows)
         detail=self.client.get(self.url+'/records/1').data
@@ -69,8 +73,8 @@ class ReportTest(unittest.TestCase):
 
     def test_report_slice_combines_with_filters_graph_sort_and_paging(self):
         self.attach(self.entries+[{'record_id':self.rows[1]['record_id'],'run_id':'demo'}])
-        self.assertEqual(self.exported(report_id=1,report_scope='matched',f='/score',op='gt',v='1'),self.rows[1:2])
-        self.assertEqual(self.exported(report_id=1,sort='/score',direction='desc'),list(reversed(self.rows[:2])))
+        self.assertEqual([row['dataset_record'] for row in self.exported(report_id=1,report_scope='matched',f='/score',op='gt',v='1')],self.rows[1:2])
+        self.assertEqual([row['dataset_record'] for row in self.exported(report_id=1,sort='/score',direction='desc')],[self.rows[1]]+[self.rows[0]]*3)
         graph=self.client.get(self.url+'/graph?report_id=1&report_scope=matched&format=json').json
         self.assertEqual(graph['scope']['matching_records'],2)
         self.assertEqual(self.exported(report_id=1,report_run='other'),[])
@@ -82,9 +86,9 @@ class ReportTest(unittest.TestCase):
     def test_multiple_reports_runs_and_ambiguous_pairs(self):
         self.attach()
         self.attach([{'record_id':self.rows[0]['record_id'],'run_id':'other','ontology':'MONDO'}])
-        self.assertEqual(self.exported(report_scope='matched'),[self.rows[0],self.rows[2]])
-        self.assertEqual(self.exported(report_id=2),self.rows[2:3])
-        self.assertEqual(self.exported(report_scope='matched',report_run='other'),self.rows[2:3])
+        self.assertEqual([row['dataset_record'] for row in self.exported(report_scope='matched')],[self.rows[0]]*3+[self.rows[2]])
+        self.assertEqual([row['dataset_record'] for row in self.exported(report_id=2)],self.rows[2:3])
+        self.assertEqual([row['dataset_record'] for row in self.exported(report_scope='matched',report_run='other')],self.rows[2:3])
         other=self.ingest([self.rows[0],self.rows[0]])
         self.attach(url=other)
         conn=database.connect(self.path)
@@ -160,6 +164,57 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(self.client.get(self.url+'/records/1?result_page=bad').status_code,400)
         self.attach([{'record_id':self.rows[1]['record_id'],'run_id':'demo'}])
         self.assertIn(b'No results for the selected report/run',self.client.get(self.url+'/records/1?report_id=2').data)
+
+
+    def test_three_ontologies_per_pair_expand_83_sources_to_249_rows(self):
+        rows=[{'record_id':f'GCA_{i:09}.1','run_id':'evaluation'} for i in range(309)]
+        self.url=self.ingest(rows)
+        entries=[{**row,'ontology':ontology,'metric':index} for row in rows[:83]
+                 for index,ontology in enumerate(('ENVO','MONDO','UBERON'))]
+        self.assertEqual(self.attach(entries).status_code,303)
+        exported=self.exported(report_id=1)
+        self.assertEqual(len(exported),249)
+        self.assertEqual([r['result_report'] for r in exported],entries)
+        self.assertEqual(len(self.exported(report_id=1,report_scope='matched_records')),83)
+        self.assertEqual(len(self.exported(report_id=1,report_scope='all')),309)
+        self.assertEqual(len(self.exported(report_id=1,report_scope='unmatched')),226)
+        self.assertEqual(self.client.get(self.url+'/graph?report_id=1&format=json').json['scope']['matching_records'],83)
+
+    def test_full_row_dedup_keeps_ontology_and_metric_differences(self):
+        original = self.entries[0]
+        reordered = dict(reversed(list(original.items())))
+        changed = {**original,'score':0.9}
+        entries = [original,reordered,self.entries[1],changed]
+        self.attach(entries)
+        exported = self.exported(report_id=1)
+        self.assertEqual([row['result_report'] for row in exported],[original,self.entries[1],changed])
+        self.assertEqual([row['report_line'] for row in exported],[1,3,4])
+        self.assertEqual(len(self.client.get(self.url+'/reports/1/download').data.splitlines()),4)
+        self.attach(entries)
+        self.assertEqual(len(self.exported(report_scope='matched')),6)
+        # Existing stored attachments gain fingerprints without changing source entries.
+        conn=database.connect(self.path)
+        with conn:conn.execute('UPDATE report_entries SET content_hash=NULL')
+        conn.close()
+        database.initialize(self.path)
+        self.assertEqual(len(self.exported(report_id=1)),3)
+        self.assertEqual(self.counts(),[2,8,8,4])
+
+    def test_result_pagination_and_unique_comment_editors(self):
+        entries=[{**self.entries[0],'metric':i} for i in range(60)]
+        self.attach(entries)
+        page=self.client.get(self.url+'?report_id=1&page=2').data.decode()
+        tbody=page.split('<tbody>',1)[1].split('</tbody>',1)[0]
+        self.assertEqual(tbody.count('<tr>'),25)
+        ids=re.findall(r'\sid="([^"]+)"',page)
+        self.assertEqual(len(ids),len(set(ids)))
+        self.assertEqual(page.count('class="comment-form"'),1)
+        self.assertEqual(page.count('<textarea'),1)
+        self.assertIn('Report · ontology',page)
+        self.assertIn('60 distinct result rows',re.sub('<[^>]+>','',page))
+        self.assertEqual(len(self.exported(report_id=1,page=2)),60)
+        self.client.post(self.url+'/records/1/comment',data={'csrf':self.csrf,'comment':'shared'})
+        self.assertTrue(all(row['dataset_record']['comments']=='shared' for row in self.exported(report_id=1)))
 
     def test_demo_creates_separate_dataset_two_matched_rows_six_entries(self):
         response=self.client.post('/demo/reports',data={'csrf':self.csrf})

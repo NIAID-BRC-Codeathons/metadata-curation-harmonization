@@ -1,0 +1,18 @@
+.workflow-toolbar{padding:18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.workflow-controls{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:12px}
+.workflow-controls select{max-width:200px;font-size:12px}
+#zoom-level{min-width:45px;text-align:center;font-variant-numeric:tabular-nums}
+.workflow-hint{padding:0 18px;font-size:12px;line-height:1.6;color:var(--muted)}
+#workflow-canvas{display:block;width:100%;height:auto;aspect-ratio:1792/1387;background:white;touch-action:pan-y}
+#workflow-canvas.zoomed{cursor:grab;touch-action:none}
+#workflow-canvas.dragging{cursor:grabbing}
+.workflow-sections rect{fill:transparent;stroke:transparent;stroke-width:3;vector-effect:non-scaling-stroke;cursor:zoom-in;transition:fill .15s,stroke .15s}
+.workflow-sections rect:hover,.workflow-sections rect:focus-visible,.workflow-sections rect.selected{fill:#2774590d;stroke:#277459;outline:none}
+.flow-lines{pointer-events:none;stroke-dasharray:7 23;animation:workflow-flow 3s linear infinite}
+@keyframes workflow-flow{to{stroke-dashoffset:-60}}
+.workflow-panel.paused .flow-lines{animation-play-state:paused}
+.workflow-summary{margin-top:22px;padding:18px;border:1px solid var(--line);border-radius:8px;line-height:1.8}
+.workflow-summary summary{cursor:pointer;font-weight:600}
+.workflow-summary li{margin:10px 0}
+@media(prefers-reduced-motion:reduce){.flow-lines{animation:none}.workflow-sections rect{transition:none}}
+@media(max-width:760px){.workflow-toolbar{padding:12px}.workflow-controls{gap:7px}.workflow-controls select{max-width:160px}}

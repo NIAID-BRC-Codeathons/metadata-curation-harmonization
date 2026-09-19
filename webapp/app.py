@@ -7,7 +7,7 @@ import sqlite3
 from pathlib import Path
 from urllib.parse import urlencode
 
-from flask import Flask, Response, jsonify, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, jsonify, abort, flash, g, redirect, render_template, request, session, url_for, send_file
 
 import database
 from ncbi_import import ImportJobs, NCBI_URL, NCBI_FILENAME
@@ -137,6 +137,14 @@ def create_app(config=None):
     register_reports(app, db, get_dataset, ROOT)
     register_graph(app, db, get_dataset, query_state, record_where)
 
+    @app.get("/workflow")
+    def workflow():
+        return render_template("workflow.html", active_id=None)
+
+    @app.get("/workflow/figure.png")
+    def workflow_figure():
+        return send_file(ROOT / "pipeline_overview_figure.png", mimetype="image/png")
+
     @app.get("/")
     def index():
         latest = db().execute("SELECT id FROM datasets ORDER BY id DESC LIMIT 1").fetchone()
@@ -239,11 +247,36 @@ def create_app(config=None):
             raise database.DataError("Page and page size must be whole numbers.") from None
         if page_size not in {25, 50, 100}:
             page_size = 25
-        count = db().execute(f"SELECT count(*) FROM records r WHERE {where}", params).fetchone()[0]
+        report_selection = report_store.selection(db(), dataset_id, request.args)
+        report_mode = report_selection['scope'] == 'matched'
+        source = 'records r LEFT JOIN record_comments c ON c.record_id=r.id'
+        selected_sql = 'r.*,c.comment'
+        if report_mode:
+            source, where, params = report_store.matched_query(report_selection, where, params)
+            selected_sql = report_store.MATCHED_COLUMNS
+            order += ', e.report_id, e.line_number, e.id'
+        count = db().execute(f"SELECT count(*) FROM {source} WHERE {where}", params).fetchone()[0]
+        source_count = db().execute(f"SELECT count(DISTINCT r.id) FROM {source} WHERE {where}", params).fetchone()[0] if report_mode else count
         pages = max(1, (count + page_size - 1) // page_size)
         page = min(page, pages)
-        rows = db().execute(f"SELECT r.*, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", params + order_params + [page_size, (page - 1) * page_size]).fetchall()
-        records = [{"id": row["id"], "line": row["line_number"], "comment": row["comment"] or "", "values": table_values(json.loads(row["payload"]), BIOPROJECT_ACCESSIONS_COLUMN in columns)} for row in rows]
+        rows = db().execute(f"SELECT {selected_sql} FROM {source} WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?", params + order_params + [page_size, (page - 1) * page_size]).fetchall()
+        records, report_columns, comment_editors = [], {}, set()
+        for row in rows:
+            record = {"id":row['id'], "line":row['line_number'], "comment":row['comment'] or '',
+                      "values":table_values(json.loads(row['payload']), BIOPROJECT_ACCESSIONS_COLUMN in columns),
+                      "comment_editor":row['id'] not in comment_editors}
+            comment_editors.add(row['id'])
+            detail_args = request.args.to_dict(flat=False)
+            if report_mode:
+                record['report_values'] = {key:(value,kind) for key,value,kind in database.flatten(json.loads(row['report_payload']))}
+                report_columns.update(dict.fromkeys(record['report_values']))
+                record.update(report_name=row['report_name'],report_id=row['report_id'],report_line=row['report_line'])
+                detail_args.update(report_id=[str(row['report_id'])],report_run=[row['run_key']])
+            record['detail_url'] = url_for('detail',dataset_id=dataset_id,record_id=row['id']) + '?' + urlencode(detail_args,doseq=True) + ('#result-report-view' if report_mode else '')
+            records.append(record)
+        # Put identity and ontology first; include every other field on the current page.
+        preferred = ['/run_id','/record_id','/ontology']
+        report_columns = [key for key in preferred if key in report_columns] + [key for key in report_columns if key not in preferred]
 
         def query_url(**changes):
             args = request.args.to_dict(flat=False)
@@ -254,7 +287,7 @@ def create_app(config=None):
         available = available_columns(fields)
         # Keep the active column order when the Columns form is applied.
         column_options = {key: available[key] for key in dict.fromkeys([*columns, *available]) if key in available}
-        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, reports=report_store.attachments(db(), dataset_id), report_selection=report_store.selection(db(), dataset_id, request.args), column_options=column_options, columns=columns, data_columns=[c for c in columns if c != COMMENTS_COLUMN], show_comments=COMMENTS_COLUMN in columns, comment_export_key=comment_export_key(fields), filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
+        return render_template("explore.html", active_id=dataset_id, dataset=dataset, fields=fields, reports=report_store.attachments(db(), dataset_id), report_selection=report_selection, report_mode=report_mode, report_columns=report_columns, source_count=source_count, column_options=column_options, columns=columns, data_columns=[c for c in columns if c != COMMENTS_COLUMN], show_comments=COMMENTS_COLUMN in columns, comment_export_key=comment_export_key(fields), filters=filters, search=search, sort=sort, direction=direction, records=records, count=count, page=page, pages=pages, page_size=page_size, query_url=query_url, query_string=request.query_string.decode(), first=(page-1)*page_size+1 if count else 0, last=min(page*page_size, count))
 
     @app.get("/datasets/<int:dataset_id>/records/<int:record_id>")
     def detail(dataset_id, record_id):
@@ -279,14 +312,25 @@ def create_app(config=None):
         filters, _ = query_state(fields)
         where, params = record_where(dataset_id, fields, filters, request.args.get("q", "").strip())
         order, order_params = database.order_clause(fields, request.args.get("sort", ""), request.args.get("direction", "asc"))
+        state = report_store.selection(db(), dataset_id, request.args)
+        report_mode = state['scope'] == 'matched'
+        source = 'records r LEFT JOIN record_comments c ON c.record_id=r.id'
+        selected_sql = 'r.payload,c.comment'
+        if report_mode:
+            source, where, params = report_store.matched_query(state, where, params)
+            selected_sql = report_store.MATCHED_COLUMNS
+            order += ', e.report_id, e.line_number, e.id'
         path = app.config["DATABASE"]
         export_key = comment_export_key(fields)
 
         def generate():
             connection = database.connect(path)
             try:
-                for row in connection.execute(f"SELECT r.payload, c.comment FROM records r LEFT JOIN record_comments c ON c.record_id=r.id WHERE {where} ORDER BY {order}", params + order_params):
-                    yield annotated_payload(row, export_key) + "\n"
+                for row in connection.execute(f"SELECT {selected_sql} FROM {source} WHERE {where} ORDER BY {order}", params + order_params):
+                    payload = annotated_payload(row, export_key)
+                    if report_mode:
+                        payload = json.dumps(report_store.matched_export(row, json.loads(payload)), ensure_ascii=False)
+                    yield payload + "\n"
             finally:
                 connection.close()
 

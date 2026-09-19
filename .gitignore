@@ -4,3 +4,5 @@
 __pycache__
 # pipeline run output directories
 data.*/
+# personal scratch
+data/clays/

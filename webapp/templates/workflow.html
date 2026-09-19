@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Workflow · Data Analyzer{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='workflow.css') }}">
+<script src="{{ url_for('static', filename='workflow.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Workflow</h1><p>From sample metadata to ontology-linked fields.</p></div><a class="button" href="{{ url_for('workflow_figure') }}" target="_blank" rel="noopener">Open original image ↗</a></div>
+<section class="data-panel workflow-panel" aria-label="Interactive pipeline overview">
+  <div class="workflow-toolbar">
+    <div class="workflow-controls"><button class="button compact" id="zoom-out" type="button" aria-label="Zoom out">−</button><output id="zoom-level" aria-live="polite">100%</output><button class="button compact" id="zoom-in" type="button" aria-label="Zoom in">+</button><button class="button compact" id="zoom-fit" type="button">Fit diagram</button></div>
+    <div class="workflow-controls"><label for="workflow-section">Focus on</label><select id="workflow-section"><option value="">Full workflow</option value="input">Input</option><option value="proposer">Proposer</option><option value="extraction">Field extraction</option><option value="rag">Ontology RAG</option><option value="candidates">Candidate terms</option><option value="resolver">Resolver</option><option value="output">Output</option></select><button class="button compact" id="flow-toggle" type="button" aria-pressed="false">Pause animation</button></div>
+  </div>
+  <p class="workflow-hint">Hover to highlight a section; click or select it to zoom in. Drag to pan when zoomed. Use Fit diagram to return to the full view.</p>
+  <svg id="workflow-canvas" viewBox="0 0 1792 1387" xmlns="http://www.w3.org/2000/svg" aria-labelledby="workflow-title workflow-description">
+    <title id="workflow-title">Metadata harmonization pipeline</title>
+    <desc id="workflow-description">Input flows to the Proposer, field extraction and ontology selection, ontology retrieval with FAISS, candidate terms, the Resolver, and annotated output. Each section can be focused with the controls above or by activating its outline.</desc>
+    <image href="{{ url_for('workflow_figure') }}" x="0" y="0" width="1792" height="1387"/>
+    <g class="flow-lines" fill="none" stroke="#277459" stroke-width="3" stroke-linecap="round" aria-hidden="true">
+      <path d="M726 302 H750 Q760 302 760 292 V179 Q760 169 770 169 H866"/>
+      <path d="M996 247 V482 Q996 492 1006 492 H1040"/>
+      <path d="M1382 705 V744 Q1382 754 1372 754 H948 Q938 754 938 744 V613 Q938 603 928 603 H729"/>
+      <path d="M498 603 H406 Q396 603 396 613 V684"/>
+      <path d="M745 1022 H809 Q819 1022 819 1012 V949 Q819 939 829 939 H866"/>
+      <path d="M996 1017 V1164 Q996 1174 1006 1174 H1028"/>
+    </g>
+    <g class="workflow-sections">
+      {% for key, label, x, y, w, h in [('input','Input',52,132,671,342),('proposer','Proposer',896,95,200,150),('extraction','Field extraction and ontology selection',1070,281,623,422),('rag','Ontology RAG with FAISS',498,528,200,150),('candidates','Top 10 similar ontology terms',49,716,694,613),('resolver','Resolver',896,865,200,150),('output','Output',1061,1056,635,238)] %}
+      <rect id="section-{{ key }}" data-section="{{ key }}" x="{{ x }}" y="{{ y }}" width="{{ w }}" height="{{ h }}" rx="8" tabindex="0" role="button" aria-label="Zoom to {{ label }}"><title>{{ label }} — click to zoom</title></rect>
+      {% endfor %}
+    </g>
+  </svg>
+</section>
+<details class="workflow-summary"><summary>Read the workflow as text</summary>
+  <ol>
+    <li><strong>Input:</strong> Sample SAMN36633012 includes its title, host (Homo sapiens), host disease (Staphylococcus aureus bacteremia), and isolation source (blood from patients of a rural regional hospital).</li>
+    <li><strong>Proposer:</strong> Extract fields and select ontologies: UBERON for blood, MONDO for disease terms, and ENVO for hospital.</li>
+    <li><strong>Ontology RAG with FAISS:</strong> Retrieve the top 10 similar ontology terms. The figure shows blood (UBERON:0000178, confidence 1.0), staphylococcal infection (MONDO:0005545, 0.98), bacteremia (MONDO:0000108, 0.93), and hospital (ENVO:0002173, 0.82).</li>
+    <li><strong>Resolver:</strong> Select the best candidate terms and assign them to fields.</li>
+    <li><strong>Output:</strong> The sample's isolation_source contains UBERON:0000178 and ENVO:0002173; host_disease contains MONDO:0005545 and MONDO:0000108.</li>
+  </ol>
+  <p>The Proposer and Resolver are shown within the LLM reasoning steps. This is an illustrated example, not live processing status.</p>
+</details>
+{% endblock %}

@@ -109,14 +109,16 @@ test_records = [{
 class F1Evaluator:
     def __init__(self, gold=GOLD_STD, ontologies=ONTOLOGIES, iri_columns=IRI_COLUMNS,
                  join_key=JOIN_KEY, prediction_key="terms", term_key="term_id",
-                 absent=ABSENT):
+                 absent=ABSENT, proposed_only=True):
         self.ontologies = list(ontologies)
         self.iri_columns = dict(iri_columns)
         self.join_key = join_key
         self.prediction_key = prediction_key
         self.term_key = term_key
         self.absent = absent
+        self.proposed_only = proposed_only
         self.gold = self._add_curie_columns(self._load_gold(gold))
+        self._gold_index = None
 
     @staticmethod
     def _load_gold(gold):
@@ -172,14 +174,28 @@ class F1Evaluator:
 
         return dict(grouped)
 
+    # first row per join key, built once rather than filtering the whole gold
+    # frame for every record; rebuilt if .gold is replaced
+    def _gold_positions(self):
+        if self._gold_index is None or self._gold_index[0] is not self.gold:
+            positions = {}
+
+            for position, key in enumerate(self.gold[self.join_key]):
+                if not pd.isna(key):  # == never matches a missing key
+                    positions.setdefault(key, position)
+
+            self._gold_index = (self.gold, positions)
+
+        return self._gold_index[1]
+
     def gold_for(self, record_id):
         """{"UBERON": "UBERON:0001242", ...} for one record, or None if unmatched."""
-        rows = self.gold[self.gold[self.join_key] == record_id]
+        position = self._gold_positions().get(record_id)
 
-        if rows.empty:
+        if position is None:
             return None
 
-        return self.group_by_ontology(rows.iloc[0][self.ontologies], container=str)
+        return self.group_by_ontology(self.gold.iloc[position][self.ontologies], container=str)
 
     # terms are dicts carrying term_id, so every term a record proposes is kept,
     # not just the primary one. A plain list of CURIEs (candidate_curies) still
@@ -222,14 +238,23 @@ class F1Evaluator:
 
         return row
 
+    # with proposed_only, a record that proposed no terms at all (an abstention such
+    # as insufficient_evidence) is left out rather than scored as a miss against
+    # every gold term it has, so recall reflects the records the pipeline answered.
+    # The count left out is kept in eval_df.attrs["unproposed"].
     def eval_frame(self, records, verbose=True):
-        """One row per matched record: gold, predicted and hit per ontology."""
+        """One row per record in both the gold standard and the proposals."""
         if isinstance(records, dict):
             records = [records]
 
         rows = []
+        unproposed = 0
 
         for record in records:
+            if self.proposed_only and not self.predicted_curies(record):
+                unproposed += 1
+                continue
+
             row = self.eval_row(record)
 
             if row is None:
@@ -242,7 +267,13 @@ class F1Evaluator:
         columns = ["record_id"] + [f"{ontology}_{key}" for ontology in self.ontologies
                                    for key in ("gold", "pred", "match")]
 
-        return pd.DataFrame(rows, columns=columns)
+        eval_df = pd.DataFrame(rows, columns=columns)
+        eval_df.attrs["unproposed"] = unproposed
+
+        if verbose and unproposed:
+            print(f"Skipped {unproposed} records that proposed no terms")
+
+        return eval_df
 
     def prf1(self, gold, pred):
         """Micro P/R/F1 over the real CURIEs seen in this slice.
@@ -256,11 +287,14 @@ class F1Evaluator:
             return {"precision": 0.0, "recall": 0.0, "f1": 0.0, "support": 0}
 
         kwargs = dict(labels=labels, average="micro", zero_division=0)
+        # precision_score, recall_score and f1_score each run this same call and
+        # keep one of its outputs
+        precision, recall, f1, _ = metrics.precision_recall_fscore_support(gold, pred, **kwargs)
 
         return {
-            "precision": metrics.precision_score(gold, pred, **kwargs),
-            "recall": metrics.recall_score(gold, pred, **kwargs),
-            "f1": metrics.f1_score(gold, pred, **kwargs),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
             "support": int((gold != self.absent).sum()),
         }
 
