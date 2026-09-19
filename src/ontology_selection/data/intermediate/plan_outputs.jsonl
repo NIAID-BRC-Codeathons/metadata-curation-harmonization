@@ -1,5 +1,10 @@
-{"record_id":"TEST001","mappings":[{"ontology":"UBERON","src_fields":[{"path":"bvbrc.isolation_source","name":"isolation_source","value":"blood"}],"query_texts":["blood"]},{"ontology":"MONDO","src_fields":[{"path":"biosample.attributes.note","name":"note","value":"patient with bloodstream infection"}],"query_texts":["bloodstream infection","infection"]}],"flags":[]}
-{"record_id":"TEST002","mappings":[{"ontology":"UBERON","src_fields":[{"path":"bvbrc.isolation_source","name":"isolation_source","value":"wound infection"}],"query_texts":["wound infection","wound"]},{"ontology":"MONDO","src_fields":[{"path":"bvbrc.isolation_source","name":"isolation_source","value":"wound infection"},{"path":"biosample.attributes.note","name":"note","value":"patient with sepsis"}],"query_texts":["wound infection","infection","sepsis"]}],"flags":[]}
-{"record_id":"TEST003","mappings":[{"ontology":"ENVO","src_fields":[{"path":"bvbrc.isolation_source","name":"isolation_source","value":"hospital wastewater"},{"path":"biosample.attributes.environment","name":"environment","value":"wastewater"}],"query_texts":["hospital wastewater","wastewater","hospital"]}],"flags":[]}
-{"record_id":"TEST004","mappings":[{"ontology":"UBERON","src_fields":[{"path":"bvbrc.isolation_source","name":"isolation_source","value":"nasal swab"},{"path":"biosample.attributes.body_sample_site","name":"body_sample_site","value":"nasal cavity"}],"query_texts":["nasal swab","nasal cavity","nose"]}],"flags":[]}
-{"record_id":"TEST005","mappings":[],"flags":["looks_like_host","no_mappings"]}
+{"record_id":"unknown_573070","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_58672","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_447990","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_771316","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_878784","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_737334","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_550149","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_768899","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_374112","mappings":[],"flags":["empty_record","no_mappings"]}
+{"record_id":"unknown_303185","mappings":[],"flags":["empty_record","no_mappings"]}
